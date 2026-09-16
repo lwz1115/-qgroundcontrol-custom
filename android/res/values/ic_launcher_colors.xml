@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the white plate baked into the launcher icons by
+         make-android-icons.py, so the adaptive-icon layers blend seamlessly. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>

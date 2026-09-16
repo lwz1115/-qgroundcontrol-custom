@@ -1,0 +1,54 @@
+name: Cache Cleanup
+
+on:
+  # Periodic GC leaves room for fresh rolling build caches.
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to clean (leave empty for all branches)'
+        required: false
+        type: string
+      dry-run:
+        description: 'List caches without deleting'
+        required: false
+        type: boolean
+        default: true
+      mode:
+        description: 'prune = keep newest build/dependency cache generations; wipe = delete all listed caches'
+        required: false
+        type: choice
+        options:
+          - prune
+          - wipe
+        default: prune
+
+permissions:
+  contents: read
+
+jobs:
+  scheduled-gc:
+    if: github.event_name == 'schedule'
+    permissions:
+      contents: read
+      # Required by the reusable cache cleanup job.
+      actions: write
+    uses: ./.github/workflows/_cache-cleanup.yml
+    with:
+      dry-run: false
+      prune: true
+      summary: true
+
+  manual:
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      # Required by the reusable cache cleanup job.
+      actions: write
+    uses: ./.github/workflows/_cache-cleanup.yml
+    with:
+      branch: ${{ inputs.branch }}
+      dry-run: ${{ inputs.dry-run }}
+      prune: ${{ inputs.mode == 'prune' }}
+      summary: true
