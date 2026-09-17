@@ -99,6 +99,9 @@ ApplicationWindow {
         readonly property real      defaultTextWidth:               ScreenTools.defaultFontPixelWidth
         // 飞行视图里的任务规划控制器 / 引导控制器（供其它页面复用）
         readonly property var       planMasterControllerFlyView:    flyView.planController
+        // 规划界面的任务控制器：任务的属性（如循环次数）以它为准，
+        // 这样在规划界面改完就立即与飞行界面右下角显示一致
+        readonly property var       planMasterControllerPlanView:   planView._planMasterController
         readonly property var       guidedControllerFlyView:        flyView.guidedController
         // QGC 启动时刻，用于显示地面站已使用时长
         readonly property var       appStartTime:                   new Date()
@@ -544,7 +547,7 @@ ApplicationWindow {
                     id: qgcButton
                     objectName: "toolbar_qgcLogo"
                     height: parent.height
-                    icon.source: "/res/QGCLogoFull.svg"
+                    icon.source: "/res/ICON.png"
                     logo: true
                     onClicked: mainWindow.showToolSelectDialog()
                 }

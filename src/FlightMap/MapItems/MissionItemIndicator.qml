@@ -21,6 +21,7 @@ MapQuickItem {
         MissionItemIndexLabel {
             id:                 _label
             checked:            _isCurrentItem
+            isSamplePoint:      missionItem.isSamplePoint === true
             label:              missionItem.abbreviation
             index:              missionItem.abbreviation.charAt(0) > 'A' && missionItem.abbreviation.charAt(0) < 'z' ? -1 : missionItem.sequenceNumber
             gimbalYaw:          missionItem.missionGimbalYaw

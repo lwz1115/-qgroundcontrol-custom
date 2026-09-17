@@ -9,6 +9,11 @@ ToolStripAction {
 
     onTriggered: {
         _guidedController.closeAll()
-        _guidedController.confirmAction(actionID)
+        // 无人船："自动导航"点击直接启航，不做滑动/长按确认
+        if (actionID === _guidedController.actionStartMission) {
+            _guidedController.executeAction(actionID)
+        } else {
+            _guidedController.confirmAction(actionID)
+        }
     }
 }

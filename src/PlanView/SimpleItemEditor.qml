@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 import QGroundControl
 import QGroundControl.Controls
@@ -29,6 +30,59 @@ Rectangle {
 
     QGCPalette { id: qgcPal; colorGroupEnabled: root.enabled }
 
+    /// 勾选采样点时若停留时间还是 0，用这个默认值（秒）
+    readonly property real _defaultSampleHoldSeconds: 10
+
+    /// 整条航线只允许一个采样点：找除本航点之外的已有采样点
+    function _findOtherSamplePoint() {
+        const items = missionItem.masterController.missionController.visualItems
+        for (let i = 1; i < items.count; i++) {
+            const item = items.get(i)
+            if (item && item !== missionItem && item.isSimpleItem === true && item.isSamplePoint === true) {
+                return item
+            }
+        }
+        return null
+    }
+
+    function _handleSamplePointClick() {
+        if (samplePointCheckBox.checked) {
+            const other = _findOtherSamplePoint()
+            if (other) {
+                // 先回滚勾选，等用户确认；取消时旧采样点保持不变
+                samplePointCheckBox.checked = false
+                QGroundControl.showMessageDialog(root, qsTr("Sample Point"),
+                                                 qsTr("This route already has a sample point (waypoint #%1). Move the sample point to this waypoint?").arg(other.sequenceNumber),
+                                                 Dialog.Yes | Dialog.Cancel,
+                                                 function() {
+                                                     other.setIsSamplePoint(false, 0)
+                                                     _applySamplePoint()
+                                                 })
+            } else {
+                _applySamplePoint()
+            }
+        } else {
+            missionItem.setIsSamplePoint(false, 0)
+        }
+    }
+
+    function _applySamplePoint() {
+        // 停留时间即采样点：已有值就用它，否则给个默认值，之后可在界面上改
+        const holdSeconds = missionItem.holdTimeFact.value > 0 ? missionItem.holdTimeFact.value : _defaultSampleHoldSeconds
+        missionItem.setIsSamplePoint(true, holdSeconds)
+        samplePointCheckBox.checked = true
+    }
+
+    Connections {
+        target: missionItem
+
+        function onIsSamplePointChanged() {
+            samplePointCheckBox.checked = missionItem.isSamplePoint
+        }
+    }
+
+    Component.onCompleted: samplePointCheckBox.checked = missionItem.isSamplePoint
+
     Column {
         id: editorColumn
         anchors.margins: _margin
@@ -36,6 +90,50 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         spacing: _margin
+
+        // 采样点（仅航点）：整条航线只允许一个
+        ColumnLayout {
+            anchors.left:  parent.left
+            anchors.right: parent.right
+            spacing:       _margin
+            visible:       missionItem.isSimpleItem && !missionItem.isTakeoffItem && missionItem.specifiesCoordinate
+
+            QGCLabel {
+                text:             qsTr("采样设置")
+                font.bold:        true
+                Layout.fillWidth: true
+            }
+
+            QGCCheckBox {
+                id:               samplePointCheckBox
+                text:             qsTr("到达此航点时自动采样")
+                Layout.fillWidth: true
+                onClicked:        _handleSamplePointClick()
+            }
+
+            // 采样停留时间（NAV_WAYPOINT 的 param1）：进任务、上传载具、飞行界面都认得
+            RowLayout {
+                Layout.fillWidth: true
+                spacing:          ScreenTools.defaultFontPixelWidth
+                visible:          samplePointCheckBox.checked
+
+                QGCLabel { text: qsTr("Hold at sample point") }
+
+                FactTextField {
+                    fact:                  missionItem.holdTimeFact
+                    showUnits:             true
+                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
+                }
+            }
+
+            QGCLabel {
+                Layout.fillWidth: true
+                wrapMode:         Text.WordWrap
+                font.pointSize:   ScreenTools.smallFontPointSize
+                text:             qsTr("Only one sample point is allowed per route. Setting a new one moves it away from the current waypoint.")
+                visible:          samplePointCheckBox.checked
+            }
+        }
 
         // Takeoff item
         ColumnLayout {

@@ -278,10 +278,8 @@ Item {
             console.log("showStartMission", showStartMission)
         }
         _outputState()
-        if (showStartMission &&
-            _flyViewSettings.enableAutomaticMissionPopups.rawValue) {
-            confirmAction(actionStartMission)
-        }
+        // 自动导航已改为点击按钮直接启航，不再自动弹确认框。
+        // 若日后想要"任务就绪自动询问"，在此加回 confirmAction(actionStartMission)。
     }
     onShowContinueMissionChanged: {
         if (_isGuidedActionsControllerLogEnabled()) {
@@ -494,6 +492,11 @@ Item {
             confirmDialog.hideTrigger = Qt.binding(function() { return !showGotoLocation })
             break;
         case actionSetWaypoint:
+            // 只有任务运行中才允许跳转（未运行任务时跳转没有意义）；
+            // 点到“当前正在执行的航点”同理。两种情况都直接忽略，不弹确认框。
+            if (!_missionActive || (actionData === _currentMissionIndex)) {
+                return
+            }
             confirmDialog.title = setWaypointTitle
             confirmDialog.message = setWaypointMessage
             break;

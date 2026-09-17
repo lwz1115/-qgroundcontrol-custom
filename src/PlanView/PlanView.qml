@@ -170,6 +170,25 @@ Item {
     }
 
     function insertSimpleItemAfterCurrent(coordinate) {
+        // 采样点防重复：新点与已有航点距离小于最小间距时拒绝添加，
+        // 否则同一位置很容易被重复勾选。下标从 1 开始，跳过任务设置项（起飞点）。
+        const minSpacing = _appSettings.samplePointMinSpacing.value
+        const items = _missionController.visualItems
+        for (let i = 1; i < items.count; i++) {
+            const item = items.get(i)
+            if (!item || !item.specifiesCoordinate) {
+                continue
+            }
+
+            const distance = item.coordinate.distanceTo(coordinate)
+            if (distance < minSpacing) {
+                QGroundControl.showMessageDialog(mainWindow, qsTr("Add Sample Point"),
+                                                 qsTr("Too close to sample point #%1 (%2 m). Minimum spacing is %3 m.")
+                                                     .arg(item.sequenceNumber).arg(distance.toFixed(1)).arg(minSpacing))
+                return
+            }
+        }
+
         var nextIndex = _missionController.currentPlanViewVIIndex + 1
         _missionController.insertSimpleMissionItem(coordinate, nextIndex, true /* makeCurrentItem */)
     }

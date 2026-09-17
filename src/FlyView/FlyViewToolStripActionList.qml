@@ -12,8 +12,8 @@ ToolStripActionList {
     model: [
         Viewer3DShowAction { },
         PreFlightCheckListShowAction { onTriggered: displayPreFlightChecklist() },
+        // GuidedActionTakeoff 已改造为"自动导航"（见该文件）
         GuidedActionTakeoff { },
-        GuidedActionLand { },
         GuidedActionRTL { },
         GuidedActionPause { },
         FlyViewAdditionalActionsButton { },

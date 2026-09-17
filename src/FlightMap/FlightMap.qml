@@ -248,11 +248,11 @@ Map {
 
         sourceItem: Image {
             id:             mapItemImage
-            source:         "/res/boat.png"
+            source:         isNaN(gcsHeading) ? "/res/QGCLogoFull.svg" : "/res/QGCLogoArrow.svg"
             mipmap:         true
             antialiasing:   true
             fillMode:       Image.PreserveAspectFit
-            height:         ScreenTools.defaultFontPixelHeight * 3
+            height:         ScreenTools.defaultFontPixelHeight * (isNaN(gcsHeading) ? 1.75 : 2.5 )
             sourceSize.height: height
             transform: Rotation {
                 origin.x:       mapItemImage.width  / 2

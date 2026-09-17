@@ -151,18 +151,6 @@ RowLayout {
         onClicked: { toolbarButtonClicked(); _clearClicked() }
     }
 
-    QGCLabel {
-        text: qsTr("Mission Loops")
-        Layout.alignment: Qt.AlignVCenter
-    }
-
-    FactTextField {
-        fact: QGroundControl.settingsManager.appSettings.missionLoopCount
-        showUnits: false
-        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 5
-        Layout.alignment: Qt.AlignVCenter
-    }
-
     QGCButton {
         iconSource: "qrc:/qmlimages/Hamburger.svg"
 
@@ -191,6 +179,44 @@ RowLayout {
                 ColumnLayout {
                     spacing: ScreenTools.defaultFontPixelHeight / 2
 
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing:         ScreenTools.defaultFontPixelWidth
+
+                        QGCLabel {
+                            text:             qsTr("Mission Loops")
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        FactTextField {
+                            fact:                   _visualItems.count > 0 ? _visualItems.get(0).loopCount : null
+                            showUnits:              false
+                            Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 5
+                            Layout.alignment:       Qt.AlignVCenter
+                        }
+                    }
+
+                    QGCButton {
+                        Layout.fillWidth: true
+                        text:    qsTr("Save Mission to History")
+                        enabled: !_syncInProgress && _hasPlanItems
+
+                        onClicked: {
+                            dropPanel.close()
+                            missionNameDialogFactory.open()
+                        }
+                    }
+
+                    QGCButton {
+                        Layout.fillWidth: true
+                        text: qsTr("Open Mission History")
+
+                        onClicked: {
+                            dropPanel.close()
+                            historyDialogFactory.open()
+                        }
+                    }
+
                     QGCButton {
                         Layout.fillWidth: true
                         text: qsTr("Save as KML")
@@ -214,6 +240,171 @@ RowLayout {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// 保存当前任务：输入任务名，存为历史目录下的 .plan 快照
+    QGCPopupDialogFactory {
+        id: missionNameDialogFactory
+
+        dialogComponent: Component {
+            QGCPopupDialog {
+                id:      missionNameDialog
+                title:   qsTr("Save Mission to History")
+                buttons: Dialog.Ok | Dialog.Cancel
+
+                ColumnLayout {
+                    spacing: ScreenTools.defaultFontPixelHeight / 2
+
+                    QGCLabel {
+                        text: qsTr("Mission name (empty uses timestamp only)")
+                    }
+
+                    QGCTextField {
+                        id:                    missionNameField
+                        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 30
+                        placeholderText:       qsTr("Mission name")
+
+                        Component.onCompleted: forceActiveFocus()
+                    }
+                }
+
+                onAccepted: {
+                    if (MissionHistoryManager.saveCurrentPlan(_planMasterController, missionNameField.text)) {
+                        QGroundControl.showMessageDialog(missionNameDialog, qsTr("Save Mission to History"), qsTr("Saved to mission history"))
+                    }
+                }
+            }
+        }
+    }
+
+    /// 打开历史任务：名称 + 保存时间两列，行尾载入/删除，底部清空
+    QGCPopupDialogFactory {
+        id: historyDialogFactory
+
+        dialogComponent: Component {
+            QGCPopupDialog {
+                id:      historyDialog
+                title:   qsTr("Open Mission History")
+                buttons: Dialog.Cancel
+
+                ListModel { id: historyModel }
+
+                function _refreshHistory() {
+                    historyModel.clear()
+                    const entries = MissionHistoryManager.historyList
+                    for (let i = 0; i < entries.length; i++) {
+                        historyModel.append({ name: entries[i].name, time: entries[i].time, size: entries[i].size })
+                    }
+                }
+
+                /// 未保存/未发送的改动会被载入覆盖，先确认
+                function _loadEntry(index) {
+                    if (_saveDirty || _uploadDirty) {
+                        QGroundControl.showMessageDialog(historyDialog, qsTr("Open Plan"),
+                                                         qsTr("You have unsaved/unsent changes. Loading a new Plan will lose these changes. Are you sure?"),
+                                                         Dialog.Yes | Dialog.Cancel,
+                                                         function() { _doLoad(index) })
+                    } else {
+                        _doLoad(index)
+                    }
+                }
+
+                function _doLoad(index) {
+                    if (MissionHistoryManager.loadHistory(_planMasterController, index)) {
+                        historyDialog.close()
+                    }
+                }
+
+                ColumnLayout {
+                    spacing: ScreenTools.defaultFontPixelHeight / 2
+
+                    QGCLabel {
+                        text: qsTr("%1 saved missions").arg(historyListView.count)
+                    }
+
+                    QGCLabel {
+                        text:    qsTr("No saved missions")
+                        visible: historyListView.count === 0
+                    }
+
+                    QGCListView {
+                        id:                      historyListView
+                        Layout.preferredWidth:   ScreenTools.defaultFontPixelWidth * 58
+                        Layout.preferredHeight:  Math.max(ScreenTools.defaultFontPixelHeight * 4,
+                                                          Math.min(contentHeight, ScreenTools.defaultFontPixelHeight * 16))
+                        model:                   historyModel
+
+                        delegate: Rectangle {
+                            // 视图的 index 与 MissionHistoryManager.historyList 的下标一致
+                            required property int    index
+                            required property string name
+                            required property string time
+                            required property string size
+
+                            width:  historyListView.width
+                            height: historyRow.implicitHeight + ScreenTools.defaultFontPixelHeight / 2
+                            color:  qgcPal.window
+
+                            RowLayout {
+                                id:                     historyRow
+                                anchors.left:           parent.left
+                                anchors.right:          parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.margins:        ScreenTools.defaultFontPixelWidth / 2
+                                spacing:                ScreenTools.defaultFontPixelWidth
+
+                                QGCLabel {
+                                    Layout.fillWidth: true
+                                    Layout.maximumWidth: ScreenTools.defaultFontPixelWidth * 20
+                                    text:             name
+                                    elide:            Text.ElideMiddle
+                                }
+
+                                QGCLabel {
+                                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 16
+                                    text:                  time
+                                }
+
+                                QGCLabel {
+                                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 8
+                                    horizontalAlignment:   Text.AlignRight
+                                    text:                  size
+                                }
+
+                                QGCButton {
+                                    text: qsTr("Load")
+
+                                    onClicked: historyDialog._loadEntry(index)
+                                }
+
+                                QGCButton {
+                                    text: qsTr("Delete")
+
+                                    onClicked: {
+                                        if (MissionHistoryManager.deleteHistory(index)) {
+                                            historyDialog._refreshHistory()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    QGCButton {
+                        Layout.fillWidth: true
+                        text:    qsTr("Clear All")
+                        enabled: historyListView.count > 0
+
+                        onClicked: {
+                            MissionHistoryManager.clearHistory()
+                            historyDialog._refreshHistory()
+                        }
+                    }
+                }
+
+                Component.onCompleted: _refreshHistory()
             }
         }
     }

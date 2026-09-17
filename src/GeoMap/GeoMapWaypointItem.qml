@@ -53,9 +53,12 @@ GeoMapItem {
     // (or a complex item with a current child) is highlighted
     readonly property bool _isCurrentItem: item ? (item.isCurrentItem || item.hasCurrentChildItem) : false
 
+    // 采样点：与 2D 标记（MissionItemIndexLabel）一致，用紫色高亮
+    readonly property bool _isSamplePoint: item ? item.isSamplePoint === true : false
+
     // Matches MissionItemIndexLabel.qml's existing convention: current item
-    // is "green", everything else is the plain map indicator color
-    readonly property color _markerColor: root._isCurrentItem ? "green" : qgcPal.mapIndicator
+    // is "green", sample point is "purple", everything else is the plain map indicator color
+    readonly property color _markerColor: root._isSamplePoint ? "purple" : (root._isCurrentItem ? "green" : qgcPal.mapIndicator)
 
     // MissionItemIndexLabel also grows the indicator for the current item
     // (small: !checked); mirrored here for both the 2D dot and 3D sphere
@@ -90,6 +93,19 @@ GeoMapItem {
         border.width: 1
         opacity: root.contentOpacity2D
         visible: root._isCurrentItem
+    }
+
+    // 采样点外环（对应 2D 标记的紫色外圈）
+    Rectangle {
+        anchors.centerIn: parent
+        width: root._indicatorSize * 1.7
+        height: width
+        radius: width / 2
+        color: "transparent"
+        border.color: "purple"
+        border.width: 2
+        opacity: root.contentOpacity2D
+        visible: root._isSamplePoint
     }
 
     QGCLabel {

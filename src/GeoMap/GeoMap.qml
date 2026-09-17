@@ -577,11 +577,11 @@ Item {
 
         Image {
             id: gcsImage
-            source: "/res/boat.png"
+            source: isNaN(gcsIndicator._gcsHeading) ? "/res/QGCLogoFull.svg" : "/res/QGCLogoArrow.svg"
             mipmap: true
             antialiasing: true
             fillMode: Image.PreserveAspectFit
-            height: ScreenTools.defaultFontPixelHeight * 3
+            height: ScreenTools.defaultFontPixelHeight * (gcsIndicator._gcsHeading ? 1.75 : 2.5)
             sourceSize.height: height
             transform: Rotation {
                 origin.x: gcsImage.width / 2

@@ -18,7 +18,8 @@ Canvas {
     property bool   small:                  !checked
     property bool   child:                  false
     property bool   highlightSelected:      false
-    property var    color:                  checked ? "green" : (child ? qgcPal.mapIndicatorChild : qgcPal.mapIndicator)
+    property bool   isSamplePoint:          false
+    property var    color:                  isSamplePoint ? "purple" : (checked ? "green" : (child ? qgcPal.mapIndicatorChild : qgcPal.mapIndicator))
     property real   anchorPointX:           _height / 2
     property real   anchorPointY:           _height / 2
     property bool   specifiesCoordinate:    true
@@ -129,6 +130,18 @@ Canvas {
         border.color:   Qt.rgba(1,1,1,0.5)
         border.width:   1
         visible:        checked && highlightSelected
+        anchors.centerIn: indicator
+    }
+
+    // 采样点：额外一圈紫色外环，一眼就能找到当前采样点
+    Rectangle {
+        width:          indicator.width * 1.7
+        height:         width
+        radius:         width * 0.5
+        color:          Qt.rgba(0,0,0,0)
+        border.color:   "purple"
+        border.width:   2
+        visible:        root.isSamplePoint
         anchors.centerIn: indicator
     }
 

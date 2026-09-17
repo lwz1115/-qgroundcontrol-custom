@@ -13,12 +13,7 @@ QtObject {
     }
 
     property var model: [
-        {
-            title:      guidedController.startMissionTitle,
-            text:       guidedController.startMissionMessage,
-            action:     guidedController.actionStartMission,
-            visible:    guidedController.showStartMission
-        },
+        // "开始任务"已移到左下角"自动导航"按钮，此处不再重复
         {
             title:      guidedController.continueMissionTitle,
             text:       guidedController.continueMissionMessage,
