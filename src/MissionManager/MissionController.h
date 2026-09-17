@@ -383,6 +383,7 @@ private:
     void                    _setPlannedHomePositionFromFirstCoordinate(const QGeoCoordinate& clickCoordinate);
     void                    _resetMissionFlightStatus           (void);
     void                    _initLoadedVisualItems              (QmlObjectListModel* loadedVisualItems);
+    void                    _updateLoopCountFromMissionItems   (void);
     FlightPathSegment*      _addFlightPathSegment               (FlightPathSegmentHashTable& prevItemPairHashTable, VisualItemPair& pair, bool mavlinkTerrainFrame);
     VisualMissionItem*      _insertSimpleMissionItemWorker      (QGeoCoordinate coordinate, MAV_CMD command, int visualItemIndex, bool makeCurrentItem);
     void                    _insertComplexMissionItemWorker     (const QGeoCoordinate& mapCenterCoordinate, ComplexMissionItem* complexItem, int visualItemIndex, bool makeCurrentItem);
@@ -463,6 +464,7 @@ private:
     static constexpr const char* _jsonHoverSpeedKey =             "hoverSpeed";
     static constexpr const char* _jsonParamsKey =                 "params";
     static constexpr const char* _jsonGlobalPlanAltitudeModeKey = "globalPlanAltitudeMode";
+    static constexpr const char* _jsonLoopCountKey =                 "loopCount";
 
     static constexpr int   _missionFileVersion =            2;
 };

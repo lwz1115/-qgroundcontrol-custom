@@ -8923,7 +8923,7 @@ VTOL</source>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="33"/>
       <source>Start Mission</source>
-      <translation>开始任务</translation>
+      <translation>自动导航</translation>
     </message>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="34"/>
@@ -8968,7 +8968,7 @@ VTOL</source>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="45"/>
       <source>Set Waypoint</source>
-      <translation>设置航点</translation>
+      <translation>跳转航点</translation>
     </message>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="46"/>
@@ -8988,7 +8988,7 @@ VTOL</source>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="60"/>
       <source>Takeoff and start the current mission</source>
-      <translation>起飞并开始当前任务</translation>
+      <translation>开始自动导航任务</translation>
     </message>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="61"/>
@@ -9038,7 +9038,7 @@ VTOL</source>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="71"/>
       <source>Adjust current waypoint to %1</source>
-      <translation>将当前航点调整为 %1</translation>
+      <translation>确认跳到第 %1 航点继续执行任务？</translation>
     </message>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="72"/>
@@ -16900,6 +16900,46 @@ Note that this will also completely reset everything, including UAVCAN nodes, al
       <source>Save as KML</source>
       <translation>保存为 KML</translation>
     </message>
+    <message>
+      <source>Save Mission to History</source>
+      <translation>保存当前任务</translation>
+    </message>
+    <message>
+      <source>Open Mission History</source>
+      <translation>打开历史任务</translation>
+    </message>
+    <message>
+      <source>Mission name (empty uses timestamp only)</source>
+      <translation>任务名称（留空则只用时间命名）</translation>
+    </message>
+    <message>
+      <source>Mission name</source>
+      <translation>任务名称</translation>
+    </message>
+    <message>
+      <source>Saved to mission history</source>
+      <translation>已保存到历史任务</translation>
+    </message>
+    <message>
+      <source>%1 saved missions</source>
+      <translation>已保存 %1 条历史任务</translation>
+    </message>
+    <message>
+      <source>No saved missions</source>
+      <translation>历史目录中没有任务</translation>
+    </message>
+    <message>
+      <source>Load</source>
+      <translation>载入</translation>
+    </message>
+    <message>
+      <source>Delete</source>
+      <translation>删除</translation>
+    </message>
+    <message>
+      <source>Clear All</source>
+      <translation>清空</translation>
+    </message>
   </context>
   <context>
     <name>PlanTreeView</name>
@@ -16929,6 +16969,14 @@ Note that this will also completely reset everything, including UAVCAN nodes, al
   </context>
   <context>
     <name>PlanView</name>
+    <message>
+      <source>Add Sample Point</source>
+      <translation>添加采样点</translation>
+    </message>
+    <message>
+      <source>Too close to sample point #%1 (%2 m). Minimum spacing is %3 m.</source>
+      <translation>与采样点 #%1 距离过近（%2 米），最小间距为 %3 米。</translation>
+    </message>
     <message>
       <location filename="../src/PlanView/PlanView.qml" line="95"/>
       <source>Plan is waiting on terrain data from server for correct altitude values.</source>
@@ -20520,6 +20568,26 @@ If a vehicle still has this key configured, you will no longer be able to commun
   </context>
   <context>
     <name>SimpleItemEditor</name>
+    <message>
+      <source>采样设置</source>
+      <translation>采样设置</translation>
+    </message>
+    <message>
+      <source>到达此航点时自动采样</source>
+      <translation>到达此航点时自动采样</translation>
+    </message>
+    <message>
+      <source>This route already has a sample point (waypoint #%1). Move the sample point to this waypoint?</source>
+      <translation>当前航线已有采样点（航点 #%1），确定将采样点设置到此航点吗？</translation>
+    </message>
+    <message>
+      <source>Only one sample point is allowed per route. Setting a new one moves it away from the current waypoint.</source>
+      <translation>每条航线只允许一个采样点，设置新采样点后旧航点将不再标记为采样点。</translation>
+    </message>
+    <message>
+      <source>Hold at sample point</source>
+      <translation>采样停留时间</translation>
+    </message>
     <message>
       <location filename="../src/PlanView/SimpleItemEditor.qml" line="49"/>
       <source>Move &apos;%1&apos; %2 to the %3 location. %4</source>

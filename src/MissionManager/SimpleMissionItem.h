@@ -32,6 +32,15 @@ public:
     Q_PROPERTY(bool             isLoiterItem            READ isLoiterItem                                       NOTIFY isLoiterItemChanged)
     Q_PROPERTY(bool             showLoiterRadius        READ showLoiterRadius                                   NOTIFY showLoiterRadiusChanged)
     Q_PROPERTY(double           loiterRadius            READ loiterRadius           WRITE setRadius             NOTIFY loiterRadiusChanged)
+    /// 采样点：由任务数据派生（航点 且 param1 停留时间 > 0），因此上传/下载/换 GCS 都不会丢
+    Q_PROPERTY(bool             isSamplePoint           READ isSamplePoint          NOTIFY isSamplePointChanged)
+    Q_PROPERTY(Fact*            holdTimeFact            READ holdTimeFact           CONSTANT)                            ///< 采样停留时间（NAV_WAYPOINT 的 param1，单位：秒）
+
+    [[nodiscard]] bool isSamplePoint() const { return (_missionItem._commandFact.rawValue().toInt() == MAV_CMD_NAV_WAYPOINT) && (_missionItem._param1Fact.rawValue().toDouble() > 0); }
+    [[nodiscard]] Fact* holdTimeFact() { return &_missionItem._param1Fact; }
+
+    /// 设为/取消采样点：勾选时把停留时间设为 holdSeconds，取消时清零
+    Q_INVOKABLE void setIsSamplePoint(bool isSamplePoint, double holdSeconds);
 
     /// Optional sections
     Q_PROPERTY(QObject*         speedSection            READ speedSection                                       NOTIFY speedSectionChanged)
@@ -149,6 +158,7 @@ signals:
     void isLoiterItemChanged        (void);
     void showLoiterRadiusChanged    (void);
     void loiterRadiusChanged        (double loiterRadius);
+    void isSamplePointChanged       ();
 
 private slots:
     void _setDirty                              (void);

@@ -10,6 +10,14 @@
     "units":            "vertical m",
     "decimalPlaces":    1,
     "default":     0
+},
+{
+    "name":             "MissionLoopCount",
+    "shortDesc": "Mission loop count",
+    "type":             "int32",
+    "min":              1,
+    "max":              65535,
+    "default":          1
 }
 ]
 }

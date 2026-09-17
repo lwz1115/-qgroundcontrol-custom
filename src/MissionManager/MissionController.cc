@@ -157,6 +157,9 @@ void MissionController::_newMissionItemsAvailableFromVehicle(bool removeAllReque
         // We set Altitude frame to mixed, otherwise if we need a non relative altitude frame we won't be able to change it
         setGlobalAltitudeFrame(weHaveItemsFromVehicle ? QGroundControlQmlGlobal::AltitudeFrameMixed : QGroundControlQmlGlobal::AltitudeFrameRelative);
 
+        // 任务项已齐，此时才能从 DO_JUMP 推导出循环次数
+        _updateLoopCountFromMissionItems();
+
         MissionController::_scanForAdditionalSettings(_visualItems, _masterController);
 
         _initAllVisualItems();
@@ -574,6 +577,32 @@ void MissionController::_setupNewVisualItems(QmlObjectListModel* newItems)
         _visualItems = new QmlObjectListModel(this);
         _addMissionSettings(_visualItems);
     }
+
+    // 文件加载时任务项已经在列表里，可以直接推导循环次数
+    _updateLoopCountFromMissionItems();
+}
+
+/// 循环次数属于任务本身：从任务项里的 DO_JUMP 反推（.plan 里另有显式字段，优先级更高）。
+/// 只在存在实际任务项时推导；写入时阻塞信号，避免刚加载完的任务被标成已修改。
+void MissionController::_updateLoopCountFromMissionItems()
+{
+    if (!_settingsItem || (_visualItems->count() < 2)) {
+        return;
+    }
+
+    auto* loopCountFact = _settingsItem->loopCount();
+    int loopCount = 1;
+    for (int i = 0; i < _visualItems->count(); i++) {
+        SimpleMissionItem* item = qobject_cast<SimpleMissionItem*>(_visualItems->get(i));
+        if (item && (item->command() == MAV_CMD_DO_JUMP)) {
+            loopCount = static_cast<int>(item->missionItem().param2()) + 1;
+            break;
+        }
+    }
+
+    const bool signalsWereBlocked = loopCountFact->blockSignals(true);
+    loopCountFact->setRawValue(loopCount);
+    loopCountFact->blockSignals(signalsWereBlocked);
 }
 
 void MissionController::removeAll(void)
@@ -596,6 +625,7 @@ bool MissionController::_loadJsonMissionFileV2(const QJsonObject& json, QmlObjec
         { _jsonCruiseSpeedKey,              QJsonValue::Double, false },
         { _jsonHoverSpeedKey,               QJsonValue::Double, false },
         { _jsonGlobalPlanAltitudeModeKey,   QJsonValue::Double, false },
+        { _jsonLoopCountKey,                QJsonValue::Double, false },
     };
     if (!JsonParsing::validateKeys(json, rootKeyInfoList, errorString)) {
         return false;
@@ -830,6 +860,15 @@ bool MissionController::load(const QJsonObject& json, QString& errorString)
     }
     _initLoadedVisualItems(loadedVisualItems);
 
+    // 循环次数随任务保存；旧文件没有该字段时保留默认值。
+    // 阻塞信号是为了不把刚加载的任务标成"已修改"。
+    if (_settingsItem) {
+        auto* loopCountFact = _settingsItem->loopCount();
+        const bool signalsWereBlocked = loopCountFact->blockSignals(true);
+        loopCountFact->setRawValue(json[_jsonLoopCountKey].toInt(loopCountFact->rawValue().toInt()));
+        loopCountFact->blockSignals(signalsWereBlocked);
+    }
+
     return true;
 }
 
@@ -879,6 +918,7 @@ void MissionController::save(QJsonObject& json)
     QJsonValue coordinateValue;
     GeoJsonHelper::saveGeoCoordinate(settingsItem->coordinate(), true /* writeAltitude */, coordinateValue);
     json[_jsonPlannedHomePositionKey]       = coordinateValue;
+    json[_jsonLoopCountKey]                 = settingsItem->loopCount()->rawValue().toInt();
     json[_jsonFirmwareTypeKey]              = _controllerVehicle->firmwareType();
     json[_jsonVehicleTypeKey]               = _controllerVehicle->vehicleType();
     json[_jsonCruiseSpeedKey]               = _controllerVehicle->defaultCruiseSpeed();

@@ -120,6 +120,19 @@
             "keywords": "mission altitude,default altitude"
         },
         {
+            "name": "samplePointMinSpacing",
+            "shortDesc": "Minimum spacing between sample points when adding them by clicking the map.",
+            "longDesc": "A new sample point closer than this distance to an existing waypoint is rejected, which prevents the same location from being sampled twice by accident.",
+            "type": "double",
+            "default": 5.0,
+            "min": 1.0,
+            "max": 50.0,
+            "units": "m",
+            "decimalPlaces": 1,
+            "label": "Sample Point Minimum Spacing",
+            "keywords": "sample point,spacing,duplicate,waypoint,minimum"
+        },
+        {
             "name": "missionLoopCount",
             "shortDesc": "Number of times the uploaded mission route is completed.",
             "longDesc": "A value of 1 runs the route once. Higher values return to the first waypoint after reaching the last waypoint.",

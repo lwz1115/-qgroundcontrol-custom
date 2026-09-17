@@ -7067,6 +7067,31 @@
       <translation>任务高度,默认高度</translation>
     </message>
     <message>
+      <extracomment>.QGC.MetaData.Facts[samplePointMinSpacing].shortDesc</extracomment>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/App.SettingsGroup.json"/>
+      <source>Minimum spacing between sample points when adding them by clicking the map.</source>
+      <translation>在地图上点击添加采样点时的最小间距。</translation>
+    </message>
+    <message>
+      <extracomment>.QGC.MetaData.Facts[samplePointMinSpacing].longDesc</extracomment>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/App.SettingsGroup.json"/>
+      <source>A new sample point closer than this distance to an existing waypoint is rejected, which prevents the same location from being sampled twice by accident.</source>
+      <translation>新采样点与已有航点距离小于该值时会被拒绝，避免同一位置被误重复打点。</translation>
+    </message>
+    <message>
+      <extracomment>.QGC.MetaData.Facts[samplePointMinSpacing].label</extracomment>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/App.SettingsGroup.json"/>
+      <source>Sample Point Minimum Spacing</source>
+      <translation>采样点最小间距</translation>
+    </message>
+    <message>
+      <extracomment>.QGC.MetaData.Facts[samplePointMinSpacing].keywords</extracomment>
+      <translatorcomment>Only use english comma ',' to separate strings</translatorcomment>
+      <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/App.SettingsGroup.json"/>
+      <source>sample point,spacing,duplicate,waypoint,minimum</source>
+      <translation>采样点,间距,重复,航点,最小值</translation>
+    </message>
+    <message>
       <extracomment>.QGC.MetaData.Facts[audioMuted].shortDesc</extracomment>
       <location filename="/home/runner/work/qgroundcontrol/qgroundcontrol/src/Settings/App.SettingsGroup.json"/>
       <source>Mute audio output</source>

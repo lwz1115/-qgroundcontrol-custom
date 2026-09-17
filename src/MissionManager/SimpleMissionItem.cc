@@ -108,6 +108,9 @@ void SimpleMissionItem::_connectSignals(void)
 {
     // Connect to change signals to track dirty state
     connect(&_missionItem._param1Fact,          &Fact::valueChanged,                        this, &SimpleMissionItem::_setDirty);
+    // 采样点由 param1（停留时间）派生：这两个信号变化时需要让界面重新取 isSamplePoint
+    connect(&_missionItem._param1Fact,          &Fact::valueChanged,                        this, &SimpleMissionItem::isSamplePointChanged);
+    connect(this,                               &SimpleMissionItem::commandChanged,         this, &SimpleMissionItem::isSamplePointChanged);
     connect(&_missionItem._param2Fact,          &Fact::valueChanged,                        this, &SimpleMissionItem::_setDirty);
     connect(&_missionItem._param3Fact,          &Fact::valueChanged,                        this, &SimpleMissionItem::_setDirty);
     connect(&_missionItem._param4Fact,          &Fact::valueChanged,                        this, &SimpleMissionItem::_setDirty);
@@ -240,6 +243,16 @@ void SimpleMissionItem::_setupMetaData(void)
 
 SimpleMissionItem::~SimpleMissionItem()
 {
+}
+
+void SimpleMissionItem::setIsSamplePoint(bool isSamplePoint, double holdSeconds)
+{
+    if (isSamplePoint && (command() != MAV_CMD_NAV_WAYPOINT)) {
+        setCommand(MAV_CMD_NAV_WAYPOINT);
+    }
+
+    // 停留时间就是采样点的载体：>0 即为采样点，0 为普通航点
+    _missionItem.setParam1(isSamplePoint ? ((holdSeconds > 0) ? holdSeconds : 10.0) : 0.0);
 }
 
 void SimpleMissionItem::save(QJsonArray&  missionItems)

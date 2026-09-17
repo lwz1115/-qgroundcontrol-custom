@@ -38,6 +38,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         MissionController.cc
         MissionController.h
         MissionFlightStatus.h
+        MissionHistoryManager.cc
+        MissionHistoryManager.h
         MissionFlightStatusCalculator.cc
         MissionFlightStatusCalculator.h
         MissionItem.cc

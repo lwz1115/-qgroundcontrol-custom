@@ -19,10 +19,12 @@ public:
     Q_PROPERTY(Fact*    plannedHomePositionAltitude READ plannedHomePositionAltitude                            CONSTANT)
     Q_PROPERTY(QObject* cameraSection               READ cameraSection                                          CONSTANT)
     Q_PROPERTY(QObject* speedSection                READ speedSection                                           CONSTANT)
+    Q_PROPERTY(Fact*    loopCount                   READ loopCount                                              CONSTANT)
 
     Fact*           plannedHomePositionAltitude (void) { return &_plannedHomePositionAltitudeFact; }
     CameraSection*  cameraSection               (void) { return &_cameraSection; }
     SpeedSection*   speedSection                (void) { return &_speedSection; }
+    Fact*           loopCount                   (void) { return &_loopCountFact; }
 
     /// Scans the loaded items for settings items
     bool scanForMissionSettings(QmlObjectListModel* visualItems, int scanIndex);
@@ -89,6 +91,8 @@ private:
     Vehicle*        _managerVehicle =                   nullptr;
     QGeoCoordinate  _plannedHomePositionCoordinate;     // Does not include altitude
     Fact            _plannedHomePositionAltitudeFact;
+    /// 任务自身的循环次数（随 .plan 保存/加载），不再读全局设置
+    Fact            _loopCountFact;
     int             _sequenceNumber =                   0;
     CameraSection   _cameraSection;
     SpeedSection    _speedSection;
@@ -96,4 +100,5 @@ private:
     static QMap<QString, FactMetaData*> _metaDataMap;
 
     static constexpr const char* _plannedHomePositionAltitudeName = "PlannedHomePositionAltitude";
+    static constexpr const char* _loopCountName =                   "MissionLoopCount";
 };

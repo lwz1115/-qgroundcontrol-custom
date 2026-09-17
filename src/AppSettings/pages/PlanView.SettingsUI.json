@@ -10,6 +10,9 @@
                     "setting": "appSettings.defaultMissionItemAltitude"
                 },
                 {
+                    "setting": "appSettings.samplePointMinSpacing"
+                },
+                {
                     "setting": "planViewSettings.vtolTransitionDistance"
                 },
                 {

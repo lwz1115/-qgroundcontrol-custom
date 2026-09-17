@@ -17,6 +17,7 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
     : ComplexMissionItem                (masterController, flyView)
     , _managerVehicle                   (masterController->managerVehicle())
     , _plannedHomePositionAltitudeFact  (0, _plannedHomePositionAltitudeName,   FactMetaData::valueTypeDouble)
+    , _loopCountFact                    (1, _loopCountName,                       FactMetaData::valueTypeInt32)
     , _cameraSection                    (masterController)
     , _speedSection                     (masterController)
 {
@@ -30,6 +31,10 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
     _plannedHomePositionAltitudeFact.setMetaData    (_metaDataMap[_plannedHomePositionAltitudeName]);
     _plannedHomePositionAltitudeFact.setRawValue    (_plannedHomePositionAltitudeFact.rawDefaultValue());
     setHomePositionSpecialCase(true);
+
+    // 循环次数属于任务本身：新建任务以全局设置作为初始值，之后由 .plan 携带
+    _loopCountFact.setMetaData(_metaDataMap[_loopCountName]);
+    _loopCountFact.setRawValue(SettingsManager::instance()->appSettings()->missionLoopCount()->rawValue());
 
     _cameraSection.setAvailable(true);
     _speedSection.setAvailable(true);
@@ -51,6 +56,7 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
     connect(this,               &MissionSettingsItem::amslEntryAltChanged,              this, &MissionSettingsItem::maxAMSLAltitudeChanged);
 
     connect(&_plannedHomePositionAltitudeFact,  &Fact::rawValueChanged,                 this, &MissionSettingsItem::_updateAltitudeInCoordinate);
+    connect(&_loopCountFact,                    &Fact::rawValueChanged,                 this, &MissionSettingsItem::_setDirty);
 
     connect(_managerVehicle, &Vehicle::homePositionChanged, this, &MissionSettingsItem::_updateFlyViewHomePosition);
     _updateFlyViewHomePosition(_managerVehicle->homePosition());
@@ -152,7 +158,7 @@ bool MissionSettingsItem::addMissionEndAction(QList<MissionItem*>& items, int se
         return false;
     }
 
-    const int loopCount = SettingsManager::instance()->appSettings()->missionLoopCount()->rawValue().toInt();
+    const int loopCount = _loopCountFact.rawValue().toInt();
     if (loopCount <= 1) {
         return false;
     }
