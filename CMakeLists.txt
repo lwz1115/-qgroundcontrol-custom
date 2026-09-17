@@ -332,6 +332,8 @@ set(QGC_APP_RESOURCES
     "${CMAKE_SOURCE_DIR}/resources/TrashCan.svg"
     "${CMAKE_SOURCE_DIR}/resources/TrashDelete.svg"
     "${CMAKE_SOURCE_DIR}/resources/XDelete.svg"
+    "${CMAKE_SOURCE_DIR}/resources/icons/boat.png"
+    "${CMAKE_SOURCE_DIR}/resources/icons/ICON.png"
     "${CMAKE_SOURCE_DIR}/resources/icons/qgroundcontrol.ico"
 )
 qgc_set_qt_resource_alias(${QGC_APP_RESOURCES})
