@@ -154,7 +154,13 @@ void MissionSettingsItem::appendMissionItems(QList<MissionItem*>& items, QObject
 
 bool MissionSettingsItem::addMissionEndAction(QList<MissionItem*>& items, int seqNum, QObject* missionItemParent)
 {
-    if (!_managerVehicle || !_managerVehicle->rover()) { 
+    if (!_managerVehicle) {
+        return false;
+    }
+
+    // 无人船也要能生成循环用的 DO_JUMP：rover() 已覆盖 ArduRover(GROUND_ROVER) 与标准水面船
+    // SURFACE_BOAT，这里再放行本项目自定义的 MAV_TYPE_TRACK
+    if (!_managerVehicle->rover() && (_managerVehicle->vehicleType() != Vehicle::MAV_TYPE_TRACK)) {
         return false;
     }
 
