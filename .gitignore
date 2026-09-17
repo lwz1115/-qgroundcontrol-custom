@@ -191,3 +191,6 @@ pytest-of-*/
 .tool-versions
 .python-version
 !tools/.python-version
+
+# Local product/requirement notes kept out of the repository
+/QGC地面站开发需求.md
