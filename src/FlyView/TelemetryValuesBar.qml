@@ -54,35 +54,58 @@ Item {
         return firstWaypoint ? firstWaypoint.sequenceNumber : -1
     }
 
-    // 终点序号：任务里最后一个“航点”的序号（specifiesCoordinate 为 true）。
-    // 任务末尾的 DO_JUMP 是动作项、没有坐标，必须排除，否则永远等不到终点。
+    // 终点锚点 = 任务末尾的 DO_JUMP 项：ArduPilot 每一圈都必经它
+    // （中间圈到达它 → 跳回起点；末圈到达它 → 跳次耗尽、任务结束）。
+    // 兼容不循环的单次任务：没有 DO_JUMP 时退回“最后一个坐标航点”。
     readonly property int _loopEndIndex: {
         const items = control._flyMissionController ? control._flyMissionController.visualItems : null
         if (!items || items.count < 2) {
             return -1
         }
-        let endIndex = -1
+        let doJumpIndex = -1
+        let lastWaypointIndex = -1
         for (let i = 0; i < items.count; i++) {
             const item = items.get(i)
-            if (item && item.specifiesCoordinate) {
-                endIndex = item.sequenceNumber
+            if (!item) {
+                continue
+            }
+            if (item.command === MAVLinkEnums.MAV_CMD_DO_JUMP) {
+                doJumpIndex = item.sequenceNumber
+            } else if (item.specifiesCoordinate) {
+                lastWaypointIndex = item.sequenceNumber
             }
         }
-        return endIndex
+        return (doJumpIndex >= 0) ? doJumpIndex : lastWaypointIndex
     }
 
-    property int    _completedLoops:   0      ///< 已完成的圈数：离开终点（或停在终点判定完成）才算一圈
+    // 最后一个坐标航点的序号：末圈跑到它以后船就停在那里（DO_JUMP 跳次已耗尽），
+    // 用它配合完成确认定时器判定“任务真的跑完了”
+    readonly property int _loopLastWaypointIndex: {
+        const items = control._flyMissionController ? control._flyMissionController.visualItems : null
+        if (!items || items.count < 2) {
+            return -1
+        }
+        let lastWaypointIndex = -1
+        for (let i = 0; i < items.count; i++) {
+            const item = items.get(i)
+            if (item && (item.command !== MAVLinkEnums.MAV_CMD_DO_JUMP) && item.specifiesCoordinate) {
+                lastWaypointIndex = item.sequenceNumber
+            }
+        }
+        return lastWaypointIndex
+    }
+
+    property int    _completedLoops:   0      ///< 已完成的圈数：每到达一次末尾 DO_JUMP（或它跳回起点）即 +1
     property int    _lastMissionIndex: -1     ///< 上一次的 MISSION_CURRENT 序号
     property bool   _loopRunActive:    false  ///< 本趟是否已起步：起步后才允许计圈
-    property bool   _atLoopEnd:        false  ///< 正停在终点（到达但还没离开，不算完成）
-    property bool   _taskCompleted:    false  ///< 本趟任务已跑满总圈数并停止
+    property bool   _taskCompleted:    false  ///< 本趟任务已跑满总圈数（末圈 DO_JUMP 跳次耗尽）
     property string _loopMissionKey:   ""     ///< 本趟任务的特征（起点/终点/总圈数），用来识别“任务是否被替换”
 
-    /// 总圈数（船上已生效值），可能为 null（拿不到就不做完成判定）
+    /// 总圈数（船上已生效值），可能为 null（拿不到时仍计圈，但不判定完成）
     readonly property var _totalLoops: control._missionLoopCount
 
-    /// 任务完成判定超时：到达终点后序号长时间不变，就认为“船已停在终点、任务结束”
-    readonly property int _taskCompleteDetectTimeoutMs: 8000
+    /// 完成确认超时：跑满总圈数、或末圈停在终点后序号长时间不变，就确认任务已结束
+    readonly property int _taskCompleteConfirmTimeoutMs: 8000
 
     /// 任务运行中：已解锁 + 处于任务模式（与 MissionController::sendToVehiclePreCheck 的判定一致）
     readonly property bool _missionRunning: {
@@ -98,7 +121,7 @@ Item {
         return control._loopStartIndex + ":" + control._loopEndIndex + ":" + control._missionLoopCount
     }
 
-    /// 把“任务运行中/已完成”写回飞行界面的任务控制器，供规划界面拦截“任务执行中改航线/上传”。
+    /// 把“任务运行中/已完成”写回飞行界面的任务控制器，供规划界面拦截“任务执行中下发新任务”。
     /// 只在主遥测栏写（多机卡片不写），避免多机时相互覆盖。
     function _publishTaskState() {
         if (specificVehicleForCard) {
@@ -116,23 +139,27 @@ Item {
         _completedLoops = 0
         _lastMissionIndex = -1
         _loopRunActive = false
-        _atLoopEnd = false
         _taskCompleted = false
         _loopMissionKey = control._loopMissionKeyOf()
-        completeDetectTimer.stop()
+        completeConfirmTimer.stop()
         control._publishTaskState()
     }
 
-    // 计圈规则（MISSION_CURRENT 是“开始前往该航点”时上报，不是“到达”时上报）：
+    // 计圈规则：锚点是任务末尾的 DO_JUMP（MISSION_CURRENT 是“开始前往该航点”时上报）。
     //   a) 起步：本趟未起步且序号已进入任务范围 → 清零重计
     //   b) 新一趟：本趟已完成、又回到起点 → 清零重计
-    //   c) 到达终点：只标记“正停在终点”，并启动完成判定定时器，此时不 +1
-    //   d) 离开终点：这一圈才算完成 → +1；跑满总圈数则标记任务已完成
-    //   e) 其余只记录上一次序号；总圈数未知时不做完成判定，只按 d) 计圈
+    //   c) 到达锚点：序号等于末尾 DO_JUMP 且上一次不是它 → 完成一圈（末圈跑到它说明跳次已耗尽）
+    //   d) 从航尾直接回到起点：等价于“DO_JUMP 已经执行过”（带 DO_JUMP 的任务只有它能跳回起点），
+    //      按同一件事计一圈（有些固件不单独上报 DO_JUMP 序号）
+    //   e) 末圈停在终点：差最后一圈且序号稳定停在终点区域 → 启动完成确认，确认后补上末圈
+    //   f) 其余只记录上一次序号（跳点不改圈次）
     function _updateLoopProgress(missionIndex) {
         if ((_loopStartIndex < 0) || (_loopEndIndex < _loopStartIndex)) {
             return
         }
+
+        // 序号一变说明船还在动，取消上一次的完成确认
+        completeConfirmTimer.stop()
 
         if (!_loopRunActive) {
             if (missionIndex >= _loopStartIndex) {
@@ -144,46 +171,63 @@ Item {
             _resetLoopProgress()
             _loopRunActive = true
             control._publishTaskState()
-        } else if (!_atLoopEnd && (missionIndex === _loopEndIndex)) {
-            _atLoopEnd = true
-            if (_totalLoops !== null) {
-                completeDetectTimer.restart()
-            }
-        } else if (_atLoopEnd && (missionIndex !== _loopEndIndex)) {
-            completeDetectTimer.stop()
-            _atLoopEnd = false
-            _completedLoops++
-            if ((_totalLoops !== null) && (_completedLoops >= _totalLoops)) {
-                _taskCompleted = true
-                control._publishTaskState()
-            }
+        } else if ((missionIndex === _loopEndIndex) && (_lastMissionIndex !== _loopEndIndex)) {
+            // 到达末尾 DO_JUMP：这一圈完成
+            control._completeOneLoop()
+        } else if ((missionIndex === _loopStartIndex) && (_lastMissionIndex > _loopStartIndex) && (_lastMissionIndex !== _loopEndIndex)) {
+            // 从航尾直接回到起点：与“DO_JUMP 已执行”是同一件事，计一圈
+            control._completeOneLoop()
+        } else if ((missionIndex === _loopLastWaypointIndex) && (_lastMissionIndex !== _loopLastWaypointIndex)) {
+            // 末圈跑到最后一个航点后停住：等完成确认
+            control._armFinalConfirm()
         }
 
         _lastMissionIndex = missionIndex
     }
 
-    // 到达终点后序号一直不变 → 判定“船已停在终点、任务结束”，补上最后一圈。
-    // 只是一次性的完成检测，不是周期轮询任务，也不触发任何上传。
-    // 注：停船由飞控处理（循环次数用尽后不再跳回、任务结束）；若某些固件需要 QGC 主动下发
-    // HOLD/暂停命令，可在这个函数里补（飞控端需配合上报 COMPLETED）。
-    function _handleTaskCompleteDetected() {
-        if (!_loopRunActive || !_atLoopEnd) {
+    /// 完成一圈：计数 +1；跑满总圈数（末圈 DO_JUMP 跳次耗尽）则判定任务已完成并启动完成确认
+    function _completeOneLoop() {
+        _completedLoops++
+        if ((_totalLoops !== null) && (_completedLoops >= _totalLoops)) {
+            _taskCompleted = true
+            completeConfirmTimer.restart()
+            control._publishTaskState()
+        }
+    }
+
+    /// 末圈（差最后一圈）停在终点区域时启动完成确认：序号长时间不再变化就认为任务已结束
+    function _armFinalConfirm() {
+        if (_taskCompleted || (_totalLoops === null)) {
             return
         }
-        if ((_totalLoops !== null) && (_completedLoops < _totalLoops)) {
-            _completedLoops++
+        if (_completedLoops !== (_totalLoops - 1)) {
+            return
         }
-        _atLoopEnd = false
-        _taskCompleted = true
-        control._publishTaskState()
+        completeConfirmTimer.restart()
+    }
+
+    // 完成确认超时：① 末圈停在终点 → 补上末圈；② 发一次“任务已完成”通知。
+    // 只是一次性的完成确认，不是周期轮询任务，也不触发任何上传。
+    // 注：停船/保位/切动力/上报 COMPLETED 由飞控负责（DO_JUMP 跳次耗尽后不再跳回）；
+    // 若某些固件需要 QGC 主动下发 HOLD/暂停命令，可在这个函数里补（飞控端需配合上报 COMPLETED）。
+    function _handleTaskConfirmed() {
+        if (!_taskCompleted && (_totalLoops !== null) && (_completedLoops === (_totalLoops - 1))) {
+            _completedLoops++
+            _taskCompleted = true
+            control._publishTaskState()
+        }
+        if (_taskCompleted) {
+            QGroundControl.showMessageDialog(globals.parent, qsTr("任务已完成"), qsTr("循环任务已跑完，船已停在最后一个航点。"))
+        }
     }
 
     Timer {
-        id: completeDetectTimer
-        interval: control._taskCompleteDetectTimeoutMs
+        id: completeConfirmTimer
+        interval: control._taskCompleteConfirmTimeoutMs
+        onTriggered: control._handleTaskConfirmed()
     }
 
-    // 解锁/飞行模式变化时同步“任务运行中”状态（用于拦截任务执行中改航线/上传）
+    // 解锁/飞行模式变化时同步“任务运行中”状态（用于拦截任务执行中下发新任务）
     on_MissionRunningChanged: control._publishTaskState()
 
     // 只有“任务被替换”才清零：重连/重新下载同一个任务时 visualItems 也会重建，

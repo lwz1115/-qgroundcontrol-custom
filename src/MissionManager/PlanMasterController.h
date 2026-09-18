@@ -61,7 +61,7 @@ public:
     Q_PROPERTY(QmlObjectListModel*      planCreators            READ planCreators                           NOTIFY planCreatorsChanged)
     Q_PROPERTY(bool                     userSelectedManualCreation READ userSelectedManualCreation WRITE setUserSelectedManualCreation NOTIFY userSelectedManualCreationChanged) ///< true: User is not using a template to create the plan
     // 任务运行状态：QGC 没有“任务完成”信号，完成判定在飞行界面（TelemetryValuesBar）里做，
-    // 再写回这里，供规划界面拦截“任务执行中改航线/上传”。
+    // 再写回这里，供规划界面拦截“任务执行中下发新任务”（规划编辑本身不受限）。
     Q_PROPERTY(bool                     missionTaskRunning      READ missionTaskRunning     WRITE setMissionTaskRunning     NOTIFY missionTaskRunningChanged)      ///< true: 载具已解锁且处于任务模式
     Q_PROPERTY(bool                     missionTaskCompleted    READ missionTaskCompleted   WRITE setMissionTaskCompleted   NOTIFY missionTaskCompletedChanged)    ///< true: 本趟任务已跑满总圈数并停止
 

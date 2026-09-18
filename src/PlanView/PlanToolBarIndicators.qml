@@ -30,26 +30,7 @@ RowLayout {
 
     readonly property real _margins: ScreenTools.defaultFontPixelWidth
 
-    // 任务执行中（已解锁 + 任务模式）且还没跑完时，禁止改航线/上传；
-    // 该状态由飞行界面遥测栏写回飞行界面的 PlanMasterController
-    readonly property bool _taskLocked: {
-        const flyController = globals.planMasterControllerFlyView
-        return flyController ? (flyController.missionTaskRunning && !flyController.missionTaskCompleted) : false
-    }
-
-    /// 任务执行中拦截改航线/上传；返回 false 表示已拦截并给过提示
-    function _checkTaskNotLocked() {
-        if (_taskLocked) {
-            QGroundControl.showMessageDialog(root, qsTr("任务执行中"), qsTr("任务执行中，禁止修改航线或上传新任务。"))
-            return false
-        }
-        return true
-    }
-
     function _uploadClicked() {
-        if (!_checkTaskNotLocked()) {
-            return
-        }
         _planMasterController.upload()
     }
 
@@ -125,9 +106,6 @@ RowLayout {
     }
 
     function _clearClicked() {
-        if (!_checkTaskNotLocked()) {
-            return
-        }
         if (_planMasterController.offline) {
             _storageClearButtonClicked();
         } else {
