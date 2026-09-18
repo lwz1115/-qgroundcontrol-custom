@@ -78,6 +78,22 @@ Item {
         return (doJumpIndex >= 0) ? doJumpIndex : lastWaypointIndex
     }
 
+    // 锚点是否来自任务末尾的 DO_JUMP：只有它才能“到达即判定任务结束”；
+    // 单次任务回退到坐标航点时，MISSION_CURRENT 是“开始前往”就上报，必须等序号稳定后再确认
+    readonly property bool _loopEndIsDoJump: {
+        const items = control._flyMissionController ? control._flyMissionController.visualItems : null
+        if (!items || items.count < 2) {
+            return false
+        }
+        for (let i = 0; i < items.count; i++) {
+            const item = items.get(i)
+            if (item && (item.command === MAVLinkEnums.MAV_CMD_DO_JUMP)) {
+                return true
+            }
+        }
+        return false
+    }
+
     // 最后一个坐标航点的序号：末圈跑到它以后船就停在那里（DO_JUMP 跳次已耗尽），
     // 用它配合完成确认定时器判定“任务真的跑完了”
     readonly property int _loopLastWaypointIndex: {
@@ -98,7 +114,8 @@ Item {
     property int    _completedLoops:   0      ///< 已完成的圈数：每到达一次末尾 DO_JUMP（或它跳回起点）即 +1
     property int    _lastMissionIndex: -1     ///< 上一次的 MISSION_CURRENT 序号
     property bool   _loopRunActive:    false  ///< 本趟是否已起步：起步后才允许计圈
-    property bool   _taskCompleted:    false  ///< 本趟任务已跑满总圈数（末圈 DO_JUMP 跳次耗尽）
+    property bool   _taskCompleted:    false  ///< 本趟任务已跑满总圈数并结束
+    property bool   _showCompletedNotice: false ///< 是否短暂显示“任务已完成”通知（非模态）
     property string _loopMissionKey:   ""     ///< 本趟任务的特征（起点/终点/总圈数），用来识别“任务是否被替换”
 
     /// 总圈数（船上已生效值），可能为 null（拿不到时仍计圈，但不判定完成）
@@ -152,7 +169,8 @@ Item {
     //   d) 从航尾直接回到起点：等价于“DO_JUMP 已经执行过”（带 DO_JUMP 的任务只有它能跳回起点），
     //      按同一件事计一圈（有些固件不单独上报 DO_JUMP 序号）
     //   e) 末圈停在终点：差最后一圈且序号稳定停在终点区域 → 启动完成确认，确认后补上末圈
-    //   f) 其余只记录上一次序号（跳点不改圈次）
+    //   f) 圈数已满但未确认（单次任务没有 DO_JUMP 时）→ 序号稳定后确认完成
+    //   g) 其余只记录上一次序号（跳点不改圈次）
     function _updateLoopProgress(missionIndex) {
         if ((_loopStartIndex < 0) || (_loopEndIndex < _loopStartIndex)) {
             return
@@ -180,19 +198,28 @@ Item {
         } else if ((missionIndex === _loopLastWaypointIndex) && (_lastMissionIndex !== _loopLastWaypointIndex)) {
             // 末圈跑到最后一个航点后停住：等完成确认
             control._armFinalConfirm()
+        } else if (!_taskCompleted && (_totalLoops !== null) && (_completedLoops >= _totalLoops)) {
+            // 圈数已满但还没确认完成（单次任务到达终点却仍在上报序号）：序号稳定后即确认
+            completeConfirmTimer.restart()
         }
 
         _lastMissionIndex = missionIndex
     }
 
-    /// 完成一圈：计数 +1；跑满总圈数（末圈 DO_JUMP 跳次耗尽）则判定任务已完成并启动完成确认
+    /// 完成一圈：计数 +1；跑满总圈数时：
+    ///   · 有 DO_JUMP → 到达它说明跳次已耗尽，立即判定完成（并由完成确认发通知）
+    ///   · 单次任务（无 DO_JUMP，锚点是坐标航点）→ 序号只是“开始前往终点”就上报，
+    ///     不能立即判定完成，交给完成确认定时器等序号稳定后再判定
     function _completeOneLoop() {
         _completedLoops++
-        if ((_totalLoops !== null) && (_completedLoops >= _totalLoops)) {
-            _taskCompleted = true
-            completeConfirmTimer.restart()
-            control._publishTaskState()
+        if ((_totalLoops === null) || (_completedLoops < _totalLoops)) {
+            return
         }
+        if (_loopEndIsDoJump) {
+            _taskCompleted = true
+        }
+        completeConfirmTimer.restart()
+        control._publishTaskState()
     }
 
     /// 末圈（差最后一圈）停在终点区域时启动完成确认：序号长时间不再变化就认为任务已结束
@@ -206,25 +233,32 @@ Item {
         completeConfirmTimer.restart()
     }
 
-    // 完成确认超时：① 末圈停在终点 → 补上末圈；② 发一次“任务已完成”通知。
+    // 完成确认超时：① 只在“还差圈数”时补上末圈（已计满不再 +1，避免末圈双计）；
+    // ② 判定任务已完成并发一次非模态完成通知。
     // 只是一次性的完成确认，不是周期轮询任务，也不触发任何上传。
     // 注：停船/保位/切动力/上报 COMPLETED 由飞控负责（DO_JUMP 跳次耗尽后不再跳回）；
     // 若某些固件需要 QGC 主动下发 HOLD/暂停命令，可在这个函数里补（飞控端需配合上报 COMPLETED）。
     function _handleTaskConfirmed() {
-        if (!_taskCompleted && (_totalLoops !== null) && (_completedLoops === (_totalLoops - 1))) {
+        if ((_totalLoops !== null) && (_completedLoops < _totalLoops)) {
             _completedLoops++
-            _taskCompleted = true
-            control._publishTaskState()
         }
-        if (_taskCompleted) {
-            QGroundControl.showMessageDialog(globals.parent, qsTr("任务已完成"), qsTr("循环任务已跑完，船已停在最后一个航点。"))
-        }
+        _taskCompleted = true
+        control._publishTaskState()
+        _showCompletedNotice = true
+        completedNoticeTimer.restart()
     }
 
     Timer {
         id: completeConfirmTimer
         interval: control._taskCompleteConfirmTimeoutMs
         onTriggered: control._handleTaskConfirmed()
+    }
+
+    // 完成通知（非模态）：在状态区短暂显示一条提示，不抢焦点、不挡操作
+    Timer {
+        id: completedNoticeTimer
+        interval: 6000
+        onTriggered: control._showCompletedNotice = false
     }
 
     // 解锁/飞行模式变化时同步“任务运行中”状态（用于拦截任务执行中下发新任务）
@@ -334,6 +368,15 @@ Item {
             text:    qsTr("任务已完成")
             color:   qgcPal.colorGreen
             visible: control._taskCompleted
+        }
+
+        // 完成通知（非模态，短暂显示后自动消失）
+        QGCLabel {
+            text:        qsTr("循环任务已跑完，船已停在最后一个航点")
+            color:       qgcPal.colorGreen
+            visible:     control._showCompletedNotice
+            Layout.fillWidth: true
+            wrapMode:    Text.WordWrap
         }
     }
 
