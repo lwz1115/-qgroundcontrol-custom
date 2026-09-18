@@ -3,6 +3,7 @@ import QtQuick.Layouts
 
 import QGroundControl
 import QGroundControl.Controls
+import QGroundControl.Logging
 
 Item {
     id:             control
@@ -54,6 +55,12 @@ Item {
         return firstWaypoint ? firstWaypoint.sequenceNumber : -1
     }
 
+    /// 该 visualItem 是否是 DO_JUMP 动作项（MissionSettingsItem 等没有 command 属性，必须先去判断类型，
+    /// 否则 undefined 对比会把设置项误当成 DO_JUMP）
+    function _isDoJumpItem(item) {
+        return item && (typeof item.command === "number") && (item.command === MAVLinkEnums.MAV_CMD_DO_JUMP)
+    }
+
     // 终点锚点 = 任务末尾的 DO_JUMP 项：ArduPilot 每一圈都必经它
     // （中间圈到达它 → 跳回起点；末圈到达它 → 跳次耗尽、任务结束）。
     // 兼容不循环的单次任务：没有 DO_JUMP 时退回“最后一个坐标航点”。
@@ -69,7 +76,7 @@ Item {
             if (!item) {
                 continue
             }
-            if (item.command === MAVLinkEnums.MAV_CMD_DO_JUMP) {
+            if (control._isDoJumpItem(item)) {
                 doJumpIndex = item.sequenceNumber
             } else if (item.specifiesCoordinate) {
                 lastWaypointIndex = item.sequenceNumber
@@ -86,8 +93,7 @@ Item {
             return false
         }
         for (let i = 0; i < items.count; i++) {
-            const item = items.get(i)
-            if (item && (item.command === MAVLinkEnums.MAV_CMD_DO_JUMP)) {
+            if (control._isDoJumpItem(items.get(i))) {
                 return true
             }
         }
@@ -104,7 +110,7 @@ Item {
         let lastWaypointIndex = -1
         for (let i = 0; i < items.count; i++) {
             const item = items.get(i)
-            if (item && (item.command !== MAVLinkEnums.MAV_CMD_DO_JUMP) && item.specifiesCoordinate) {
+            if (item && !control._isDoJumpItem(item) && item.specifiesCoordinate) {
                 lastWaypointIndex = item.sequenceNumber
             }
         }
@@ -172,8 +178,16 @@ Item {
     //   f) 圈数已满但未确认（单次任务没有 DO_JUMP 时）→ 序号稳定后确认完成
     //   g) 其余只记录上一次序号（跳点不改圈次）
     function _updateLoopProgress(missionIndex) {
-        if ((_loopStartIndex < 0) || (_loopEndIndex < _loopStartIndex)) {
+        // 只要起点有效即可计圈：终点锚点异常时不应把整个计圈停掉（兜底分支仍可用）
+        if (_loopStartIndex < 0) {
             return
+        }
+
+        // 诊断开关：沿用 PlanMasterController 日志分类（设置页里的全名就是它）
+        if (QGCLoggingCategoryManager.isCategoryEnabled("PlanManager.PlanMasterController")) {
+            console.log("TelemetryValuesBar loopProgress index", missionIndex,
+                        "start", _loopStartIndex, "end", _loopEndIndex, "lastWp", _loopLastWaypointIndex,
+                        "total", _totalLoops, "done", _completedLoops, "active", _loopRunActive, "completed", _taskCompleted)
         }
 
         // 序号一变说明船还在动，取消上一次的完成确认

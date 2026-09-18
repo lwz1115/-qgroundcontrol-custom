@@ -267,6 +267,14 @@ void PlanMasterController::_loadRallyPointsComplete(void)
 
 void PlanMasterController::_sendMissionComplete(void)
 {
+    if (_flyView) {
+        // 上传完成后，把任务管理器里已经更新的任务重新推给飞行界面（纯本地、不发任何 MAVLink 事务）：
+        // 否则飞行界面的任务仍是连接时下载的旧任务，航线与循环次数显示都会停在旧值。
+        // 刻意不做“重新下载”，避免与仍在进行的围栏/返航点上传抢那条单事务的任务协议。
+        qCDebug(PlanMasterControllerLog) << "_sendMissionComplete: refresh fly view from manager vehicle (local)";
+        _missionController.showPlanFromManagerVehicle();
+    }
+
     if (_sendGeoFence) {
         _sendGeoFence = false;
         _sendRallyPoints = true;
