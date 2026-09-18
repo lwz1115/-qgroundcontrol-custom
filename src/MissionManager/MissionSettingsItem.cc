@@ -63,7 +63,7 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
 
     connect(&_plannedHomePositionAltitudeFact,  &Fact::rawValueChanged,                 this, &MissionSettingsItem::_updateAltitudeInCoordinate);
     connect(&_loopCountFact,                    &Fact::rawValueChanged,                 this, &MissionSettingsItem::_setDirty);
-    connect(&_returnHomeAfterLoopFact,      &Fact::rawValueChanged,         this, &MissionSettingsItem::_setDirty);
+    connect(&_returnHomeAfterLoopFact,          &Fact::rawValueChanged,                 this, &MissionSettingsItem::_setDirty);
     connect(&_loopCountFact,                    &Fact::rawValueChanged,                 this, &MissionSettingsItem::_rememberLoopCount);
     connect(&_returnHomeAfterLoopFact,          &Fact::rawValueChanged,                 this, &MissionSettingsItem::_rememberReturnHomeAfterLoop);
 

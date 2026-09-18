@@ -396,6 +396,9 @@ private:
     static double           _normalizeLat                       (double lat);
     static double           _normalizeLon                       (double lon);
     static bool             _convertToMissionItems              (QmlObjectListModel* visualMissionItems, QList<MissionItem*>& rgMissionItems, QObject* missionItemParent);
+    /// 末尾连续的“派生结束动作”（DO_JUMP / RTL）的项数：这些项由循环次数/返回 HOME 设置生成，
+    /// 不落盘为普通任务项，由设置统一重新生成，保证反复下载/上传/保存都幂等
+    static int              _trailingEndActionCount             (QmlObjectListModel* visualMissionItems);
 
 private:
     Vehicle*                    _controllerVehicle =            nullptr;

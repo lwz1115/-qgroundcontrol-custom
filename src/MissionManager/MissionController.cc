@@ -202,6 +202,31 @@ void MissionController::sendToVehicle(void)
     }
 }
 
+/// 末尾连续的“派生结束动作”（DO_JUMP / RTL）的项数。
+/// 这些项是"循环次数 / 循环完返回 HOME"两个设置的产物，不是可编辑的任务项；
+/// 从载具下载回来的任务会把它们一并带回来，做任何转换前都要先把这段剥离掉，
+/// 再由设置重新生成一份，否则每上传一次就多攒一个跳点（船上多个 DO_JUMP 各自计数，圈数随之失效）。
+int MissionController::_trailingEndActionCount(QmlObjectListModel* visualMissionItems)
+{
+    if (!visualMissionItems) {
+        return 0;
+    }
+
+    int count = 0;
+    for (int i = visualMissionItems->count() - 1; i > 0; i--) {
+        SimpleMissionItem* item = qobject_cast<SimpleMissionItem*>(visualMissionItems->get(i));
+        if (!item) {
+            break;
+        }
+        const MAV_CMD command = item->mavCommand();
+        if ((command != MAV_CMD_DO_JUMP) && (command != MAV_CMD_NAV_RETURN_TO_LAUNCH)) {
+            break;
+        }
+        count++;
+    }
+    return count;
+}
+
 /// Converts from visual items to MissionItems
 ///     @param missionItemParent QObject parent for newly allocated MissionItems
 /// @return true: Mission end action was added to end of list
@@ -211,22 +236,8 @@ bool MissionController::_convertToMissionItems(QmlObjectListModel* visualMission
         return false;
     }
 
-    // 末尾的 DO_JUMP / RTL 是"循环次数/返回 HOME"两个设置的派生物，不是可编辑的任务项。
-    // 从机器下载回来的任务会把它们一并带回规划界面，若照单上传，每上传一次就多攒一个跳点：
-    // 船上会出现多个 DO_JUMP，各自独立计数（ArduPilot 每个跳点单独记次数），循环圈数随之失效。
-    // 这里先去掉末尾这一连续段，再由 addMissionEndAction 按当前设置重新生成一份。
-    int itemCount = visualMissionItems->count();
-    while (itemCount > 1) {
-        SimpleMissionItem* trailingItem = qobject_cast<SimpleMissionItem*>(visualMissionItems->get(itemCount - 1));
-        if (!trailingItem) {
-            break;
-        }
-        const MAV_CMD trailingCommand = trailingItem->mavCommand();
-        if ((trailingCommand != MAV_CMD_DO_JUMP) && (trailingCommand != MAV_CMD_NAV_RETURN_TO_LAUNCH)) {
-            break;
-        }
-        itemCount--;
-    }
+    // 先剥离末尾的派生结束动作（DO_JUMP / RTL），再由 addMissionEndAction 按当前设置重新生成一份
+    const int itemCount = visualMissionItems->count() - _trailingEndActionCount(visualMissionItems);
 
     // 控制台可见：确认这次上传确实把这些派生项丢掉了（没看到这行就说明这份计划里没有多余跳点）
     const int droppedEndActions = visualMissionItems->count() - itemCount;
@@ -616,17 +627,27 @@ void MissionController::_updateLoopCountFromMissionItems()
 
     auto* loopCountFact = _settingsItem->loopCount();
     int loopCount = 1;
-    bool returnHomeAfterLoop = false;
     for (int i = 0; i < _visualItems->count(); i++) {
         SimpleMissionItem* item = qobject_cast<SimpleMissionItem*>(_visualItems->get(i));
-        if (!item) {
-            continue;
-        }
-        if (item->command() == MAV_CMD_DO_JUMP) {
+        if (item && (item->command() == MAV_CMD_DO_JUMP)) {
+            // 多条 DO_JUMP 时取最后一条（正常只会有末尾那一条）
             loopCount = static_cast<int>(item->missionItem().param2()) + 1;
-        } else if (item->command() == MAV_CMD_NAV_RETURN_TO_LAUNCH) {
-            // 任务末尾的 RTL 就是"循环完返回 HOME"的产物
+        }
+    }
+
+    // 是否"循环完返回 HOME"只看末尾那段派生项：从尾部往前扫，RTL 记真、DO_JUMP 继续、
+    // 遇到别的命令就停。任务中途自己加的 RTL 不代表这个设置，不能影响它。
+    bool returnHomeAfterLoop = false;
+    for (int i = _visualItems->count() - 1; i > 0; i--) {
+        SimpleMissionItem* item = qobject_cast<SimpleMissionItem*>(_visualItems->get(i));
+        if (!item) {
+            break;
+        }
+        const MAV_CMD command = item->mavCommand();
+        if (command == MAV_CMD_NAV_RETURN_TO_LAUNCH) {
             returnHomeAfterLoop = true;
+        } else if (command != MAV_CMD_DO_JUMP) {
+            break;
         }
     }
 
@@ -969,22 +990,34 @@ void MissionController::save(QJsonObject& json)
 
     // Save the visual items
 
+    // 末尾从载具带回来的派生结束动作（DO_JUMP / RTL）不落盘为普通任务项：
+    // 它们由"循环次数 / 循环完返回 HOME"设置统一重新生成，这样反复下载/保存/上传都幂等。
+    const int saveItemCount = _visualItems->count() - _trailingEndActionCount(_visualItems);
+
     QJsonArray rgJsonMissionItems;
-    for (int i=0; i<_visualItems->count(); i++) {
+    int lastRealSeqNum = 0;
+    for (int i=0; i<saveItemCount; i++) {
         VisualMissionItem* visualItem = qobject_cast<VisualMissionItem*>(_visualItems->get(i));
 
         visualItem->save(rgJsonMissionItems);
+
+        lastRealSeqNum = visualItem->lastSequenceNumber();
     }
 
     // Mission settings has a special case for end mission action
     if (settingsItem) {
         QList<MissionItem*> rgMissionItems;
 
-        if (_convertToMissionItems(_visualItems, rgMissionItems, this /* missionItemParent */)) {
-            QJsonObject saveObject;
-            MissionItem* missionItem = rgMissionItems[rgMissionItems.count() - 1];
-            missionItem->save(saveObject);
-            rgJsonMissionItems.append(saveObject);
+        _convertToMissionItems(_visualItems, rgMissionItems, this /* missionItemParent */);
+
+        // 派生项按生成顺序依次落盘：只写最后一个的话，DO_JUMP + RTL 同时存在时会丢掉 DO_JUMP
+        for (int i=0; i<rgMissionItems.count(); i++) {
+            MissionItem* missionItem = rgMissionItems[i];
+            if (missionItem->sequenceNumber() > lastRealSeqNum) {
+                QJsonObject saveObject;
+                missionItem->save(saveObject);
+                rgJsonMissionItems.append(saveObject);
+            }
         }
         for (int i=0; i<rgMissionItems.count(); i++) {
             rgMissionItems[i]->deleteLater();
