@@ -16,7 +16,7 @@ ToolStripActionList {
         GuidedActionTakeoff { },
         GuidedActionRTL { },
         GuidedActionPause { },
-        FlyViewAdditionalActionsButton { },
+        // "动作(Actions)"按钮对无人船无意义：从左上角工具条移除，任何场景都不再显示
         FlyViewGripperButton { }
     ]
 }
