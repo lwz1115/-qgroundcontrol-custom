@@ -182,7 +182,6 @@ Item {
     }
 
     function insertSimpleItemAfterCurrent(coordinate) {
-
         // 采样点防重复：新点与已有航点距离小于最小间距时拒绝添加，
         // 否则同一位置很容易被重复勾选。下标从 1 开始，跳过任务设置项（起飞点）。
         const minSpacing = _appSettings.samplePointMinSpacing.value

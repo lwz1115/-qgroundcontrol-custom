@@ -45,14 +45,22 @@ Item {
         return (settingsItem && settingsItem.loopCount) ? settingsItem.loopCount.rawValue : null
     }
 
-    // 起点序号（DO_JUMP 的回跳目标，即第一个航点）：航点不足 2 项时无法判圈，返回 -1
+    // 起点序号 = 任务里第一个“带坐标”的项，也就是第一个航点
+    // （DO_JUMP / RTL 都不是坐标项，会被自动跳过）。不能写死 items.get(1)：
+    // 前面若排了相机、速度等非坐标命令，下标 1 就不是第一个航点，起点取错会让“跳回起点”这段计不上圈。
+    // 从下标 1 开始扫：下标 0 固定是任务设置项（它也代表 home，同样算坐标项）；找不到返回 -1。
     readonly property int _loopStartIndex: {
         const items = control._flyMissionController ? control._flyMissionController.visualItems : null
         if (!items || items.count < 2) {
             return -1
         }
-        const firstWaypoint = items.get(1)
-        return firstWaypoint ? firstWaypoint.sequenceNumber : -1
+        for (let i = 1; i < items.count; i++) {
+            const item = items.get(i)
+            if (item && item.specifiesCoordinate) {
+                return item.sequenceNumber
+            }
+        }
+        return -1
     }
 
     /// 该 visualItem 是否是 DO_JUMP 动作项（MissionSettingsItem 等没有 command 属性，必须先去判断类型，
@@ -129,7 +137,11 @@ Item {
     /// 完成确认超时：跑满总圈数、或末圈停在终点后序号长时间不变，就确认任务已结束
     readonly property int _taskCompleteConfirmTimeoutMs: 8000
 
-    /// 任务运行中：已解锁 + 处于任务模式（与 MissionController::sendToVehiclePreCheck 的判定一致）
+    /// 停稳判定阈值（m/s）：低于此速度视为停稳
+    readonly property real _stationarySpeedThreshold: 0.5
+
+    /// 任务运行中：已解锁 + 处于任务模式。
+    /// 与 MissionController::sendToVehiclePreCheck 的 armed+missionFlightMode 判定保持一致，两处若改动需同步。
     readonly property bool _missionRunning: {
         const vehicle = control._vehicle
         return vehicle ? (vehicle.armed && (vehicle.flightMode === vehicle.missionFlightMode)) : false
@@ -138,9 +150,10 @@ Item {
     // 显示“已循环次数/总次数”，例如 3/5；拿不到总次数时显示 “--”
     readonly property string _loopCountText: _missionLoopCount === null ? "--" : (_completedLoops + "/" + _missionLoopCount)
 
-    /// 任务特征：起点/终点/总圈数一致就认为是同一个任务
+    /// 任务特征：起点/终点/总圈数一致就认为是同一个任务。
+    /// 总圈数可能取不到（null），这里归一化为 -1：否则 null ↔ 有值之间抖动会让特征对不上、误清零。
     function _loopMissionKeyOf() {
-        return control._loopStartIndex + ":" + control._loopEndIndex + ":" + control._missionLoopCount
+        return control._loopStartIndex + ":" + control._loopEndIndex + ":" + (control._missionLoopCount === null ? -1 : control._missionLoopCount)
     }
 
     /// 把“任务运行中/已完成”写回飞行界面的任务控制器，供规划界面拦截“任务执行中下发新任务”。
@@ -259,6 +272,14 @@ Item {
     // 注：停船/保位/切动力/上报 COMPLETED 由飞控负责（DO_JUMP 跳次耗尽后不再跳回）；
     // 若某些固件需要 QGC 主动下发 HOLD/暂停命令，可在这个函数里补（飞控端需配合上报 COMPLETED）。
     function _handleTaskConfirmed() {
+        // 只有停稳后才确认完成：单次任务没有 DO_JUMP 时，MISSION_CURRENT 在“开始前往终点”就上报，
+        // 慢速船这时往往还在半路，光靠 8 秒定时器会提前判完成。仍在移动就继续等，慢速船不会误判。
+        const vehicle = control._vehicle
+        const groundSpeedFact = vehicle ? vehicle.vehicle.groundSpeed : null
+        if (groundSpeedFact && (groundSpeedFact.value > control._stationarySpeedThreshold)) {
+            completeConfirmTimer.restart()
+            return
+        }
         if ((_totalLoops !== null) && (_completedLoops < _totalLoops)) {
             _completedLoops++
         }
