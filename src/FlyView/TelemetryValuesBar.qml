@@ -377,13 +377,6 @@ Item {
             QGCLabel { text: control._dateText;       Layout.preferredWidth: control._valueWidth }
         }
 
-        // 状态区：任务跑满总圈数并停止后提示“任务已完成”
-        QGCLabel {
-            text:    qsTr("任务已完成")
-            color:   qgcPal.colorGreen
-            visible: control._taskCompleted
-        }
-
         // 完成通知（非模态，短暂显示后自动消失）
         QGCLabel {
             text:        qsTr("循环任务已跑完，船已停在最后一个航点")
