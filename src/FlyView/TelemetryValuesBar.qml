@@ -120,8 +120,7 @@ Item {
     property int    _completedLoops:   0      ///< 已完成的圈数：每到达一次末尾 DO_JUMP（或它跳回起点）即 +1
     property int    _lastMissionIndex: -1     ///< 上一次的 MISSION_CURRENT 序号
     property bool   _loopRunActive:    false  ///< 本趟是否已起步：起步后才允许计圈
-    property bool   _taskCompleted:    false  ///< 本趟任务已跑满总圈数并结束
-    property bool   _showCompletedNotice: false ///< 是否短暂显示“任务已完成”通知（非模态）
+    property bool   _taskCompleted:    false  ///< 本趟任务已跑满总圈数并结束（无 UI 提示，仅供上传拦截使用）
     property string _loopMissionKey:   ""     ///< 本趟任务的特征（起点/终点/总圈数），用来识别“任务是否被替换”
 
     /// 总圈数（船上已生效值），可能为 null（拿不到时仍计圈，但不判定完成）
@@ -249,7 +248,7 @@ Item {
     }
 
     // 完成确认超时：① 只在“还差圈数”时补上末圈（已计满不再 +1，避免末圈双计）；
-    // ② 判定任务已完成并发一次非模态完成通知。
+    // ② 判定任务已完成（仅作为状态，不再弹任何提示）。
     // 只是一次性的完成确认，不是周期轮询任务，也不触发任何上传。
     // 注：停船/保位/切动力/上报 COMPLETED 由飞控负责（DO_JUMP 跳次耗尽后不再跳回）；
     // 若某些固件需要 QGC 主动下发 HOLD/暂停命令，可在这个函数里补（飞控端需配合上报 COMPLETED）。
@@ -259,21 +258,12 @@ Item {
         }
         _taskCompleted = true
         control._publishTaskState()
-        _showCompletedNotice = true
-        completedNoticeTimer.restart()
     }
 
     Timer {
         id: completeConfirmTimer
         interval: control._taskCompleteConfirmTimeoutMs
         onTriggered: control._handleTaskConfirmed()
-    }
-
-    // 完成通知（非模态）：在状态区短暂显示一条提示，不抢焦点、不挡操作
-    Timer {
-        id: completedNoticeTimer
-        interval: 6000
-        onTriggered: control._showCompletedNotice = false
     }
 
     // 解锁/飞行模式变化时同步“任务运行中”状态（用于拦截任务执行中下发新任务）
@@ -305,8 +295,12 @@ Item {
         }
     }
 
-    /// 任务被替换后：起点/终点/总圈数变了才清零，同一个任务（重连、重下载）保持已跑圈数
+    /// 任务被替换后：起点/终点/总圈数变了才清零，同一个任务（重连、重下载）保持已跑圈数。
+    /// 断连时任务会被清空（特征无效），这时必须保留已跑圈数，否则重连后计数就丢了。
     function _checkMissionReplaced() {
+        if ((control._loopStartIndex < 0) || (control._loopEndIndex < 0)) {
+            return
+        }
         const missionKey = control._loopMissionKeyOf()
         if (missionKey !== control._loopMissionKey) {
             control._resetLoopProgress()
@@ -387,15 +381,6 @@ Item {
             QGCLabel { text: control._timeText;       Layout.preferredWidth: control._valueWidth }
             QGCLabel { text: qsTr("Date:");          Layout.preferredWidth: control._labelWidth; horizontalAlignment: Text.AlignRight }
             QGCLabel { text: control._dateText;       Layout.preferredWidth: control._valueWidth }
-        }
-
-        // 完成通知（非模态，短暂显示后自动消失）
-        QGCLabel {
-            text:        qsTr("循环任务已跑完，船已停在最后一个航点")
-            color:       qgcPal.colorGreen
-            visible:     control._showCompletedNotice
-            Layout.fillWidth: true
-            wrapMode:    Text.WordWrap
         }
     }
 
