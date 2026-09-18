@@ -37,9 +37,10 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
     _loopCountFact.setMetaData(_metaDataMap[_loopCountName]);
     _loopCountFact.setRawValue(SettingsManager::instance()->appSettings()->missionLoopCount()->rawValue());
 
-    // “循环完返回 HOME 点”也属于任务本身：默认不勾选，由 .plan / 船上任务携带
+    // “循环完返回 HOME 点”也属于任务本身：默认取自全局设置（用户改过后会回写，见 _rememberReturnHomeAfterLoop），
+    // 之后由 .plan / 船上任务携带
     _returnHomeAfterLoopFact.setMetaData(_metaDataMap[_returnHomeAfterLoopName]);
-    _returnHomeAfterLoopFact.setRawValue(false);
+    _returnHomeAfterLoopFact.setRawValue(SettingsManager::instance()->appSettings()->missionReturnHomeAfterLoop()->rawValue());
 
     _cameraSection.setAvailable(true);
     _speedSection.setAvailable(true);
@@ -63,6 +64,8 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
     connect(&_plannedHomePositionAltitudeFact,  &Fact::rawValueChanged,                 this, &MissionSettingsItem::_updateAltitudeInCoordinate);
     connect(&_loopCountFact,                    &Fact::rawValueChanged,                 this, &MissionSettingsItem::_setDirty);
     connect(&_returnHomeAfterLoopFact,      &Fact::rawValueChanged,         this, &MissionSettingsItem::_setDirty);
+    connect(&_loopCountFact,                    &Fact::rawValueChanged,                 this, &MissionSettingsItem::_rememberLoopCount);
+    connect(&_returnHomeAfterLoopFact,          &Fact::rawValueChanged,                 this, &MissionSettingsItem::_rememberReturnHomeAfterLoop);
 
     connect(_managerVehicle, &Vehicle::homePositionChanged, this, &MissionSettingsItem::_updateFlyViewHomePosition);
     _updateFlyViewHomePosition(_managerVehicle->homePosition());
@@ -247,6 +250,18 @@ double MissionSettingsItem::complexDistance(void) const
 void MissionSettingsItem::_setDirty(void)
 {
     setDirty(true);
+}
+
+void MissionSettingsItem::_rememberLoopCount(void)
+{
+    // 回写全局设置：清空航点 / 新建任务时用上一次的循环次数作默认，而不是每次都回到 1
+    SettingsManager::instance()->appSettings()->missionLoopCount()->setRawValue(_loopCountFact.rawValue());
+}
+
+void MissionSettingsItem::_rememberReturnHomeAfterLoop(void)
+{
+    // 回写全局设置：清空航点 / 新建任务时保持“循环完返回 HOME”的勾选状态
+    SettingsManager::instance()->appSettings()->missionReturnHomeAfterLoop()->setRawValue(_returnHomeAfterLoopFact.rawValue());
 }
 
 void MissionSettingsItem::setCoordinate(const QGeoCoordinate& coordinate)

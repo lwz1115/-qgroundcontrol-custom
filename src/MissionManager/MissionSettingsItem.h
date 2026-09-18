@@ -85,6 +85,9 @@ signals:
 private slots:
     void _setDirtyAndUpdateLastSequenceNumber   (void);
     void _setDirty                              (void);
+    /// 把用户改过的循环次数/返回 HOME 回写到全局设置，清空或新建任务时继承上一次的值
+    void _rememberLoopCount                     (void);
+    void _rememberReturnHomeAfterLoop           (void);
     void _sectionDirtyChanged                   (bool dirty);
     void _updateAltitudeInCoordinate            (QVariant value);
     void _setHomeAltFromTerrain                 (double terrainAltitude);

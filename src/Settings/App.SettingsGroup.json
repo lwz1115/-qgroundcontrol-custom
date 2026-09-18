@@ -144,6 +144,15 @@
             "keywords": "mission,loop,repeat,circuit"
         },
         {
+            "name": "missionReturnHomeAfterLoop",
+            "shortDesc": "Return to launch after the mission loops complete.",
+            "longDesc": "When enabled the vehicle returns to its launch point after completing all mission loops.",
+            "type": "bool",
+            "default": false,
+            "label": "Return Home After Loops",
+            "keywords": "mission,loop,return,home,rtl"
+        },
+        {
             "name": "audioMuted",
             "shortDesc": "Mute audio output",
             "longDesc": "Mutes all audio output without changing the volume level.",
