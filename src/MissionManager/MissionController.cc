@@ -211,10 +211,27 @@ bool MissionController::_convertToMissionItems(QmlObjectListModel* visualMission
         return false;
     }
 
+    // 末尾的 DO_JUMP / RTL 是"循环次数/返回 HOME"两个设置的派生物，不是可编辑的任务项。
+    // 从机器下载回来的任务会把它们一并带回规划界面，若照单上传，每上传一次就多攒一个跳点：
+    // 船上会出现多个 DO_JUMP，各自独立计数（ArduPilot 每个跳点单独记次数），循环圈数随之失效。
+    // 这里先去掉末尾这一连续段，再由 addMissionEndAction 按当前设置重新生成一份。
+    int itemCount = visualMissionItems->count();
+    while (itemCount > 1) {
+        SimpleMissionItem* trailingItem = qobject_cast<SimpleMissionItem*>(visualMissionItems->get(itemCount - 1));
+        if (!trailingItem) {
+            break;
+        }
+        const MAV_CMD trailingCommand = trailingItem->command();
+        if ((trailingCommand != MAV_CMD_DO_JUMP) && (trailingCommand != MAV_CMD_NAV_RETURN_TO_LAUNCH)) {
+            break;
+        }
+        itemCount--;
+    }
+
     bool endActionSet = false;
     int lastSeqNum = 0;
 
-    for (int i=0; i<visualMissionItems->count(); i++) {
+    for (int i=0; i<itemCount; i++) {
         VisualMissionItem* visualItem = qobject_cast<VisualMissionItem*>(visualMissionItems->get(i));
 
         lastSeqNum = visualItem->lastSequenceNumber();
