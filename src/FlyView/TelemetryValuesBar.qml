@@ -212,6 +212,12 @@ Item {
         } else if ((missionIndex === _loopLastWaypointIndex) && (_lastMissionIndex !== _loopLastWaypointIndex)) {
             // 末圈跑到最后一个航点后停住：等完成确认
             control._armFinalConfirm()
+        } else if ((_loopLastWaypointIndex >= 0) && (_totalLoops !== null) && (_completedLoops === (_totalLoops - 1)) && (missionIndex > _loopLastWaypointIndex)) {
+            // 末圈后任务越过最后一个坐标航点（返回 HOME / 结束动作，序号比最后航点还大）：
+            // 只有 DO_JUMP 跳次耗尽才会走到这里，说明末圈真的跑完了。
+            // 此前末圈靠“序号停在终点”的定时器确认，一旦执行返回 HOME 序号会继续往前走、
+            // 定时器被取消，所以这里直接把末圈补上并判完成。
+            control._handleTaskConfirmed()
         } else if (!_taskCompleted && (_totalLoops !== null) && (_completedLoops >= _totalLoops)) {
             // 圈数已满但还没确认完成（单次任务到达终点却仍在上报序号）：序号稳定后即确认
             completeConfirmTimer.restart()
