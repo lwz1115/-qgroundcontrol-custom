@@ -152,7 +152,8 @@ Item {
         }
         const planController = globals.planMasterControllerFlyView
         if (planController) {
-            planController.missionTaskRunning = control._missionRunning
+            // 任务已判完成后不再算“运行中”，否则停在总圈数上仍处于任务模式时会一直拦着不让上传新任务
+            planController.missionTaskRunning = control._missionRunning && !control._taskCompleted
             planController.missionTaskCompleted = control._taskCompleted
         }
     }
@@ -278,9 +279,10 @@ Item {
     // 解锁/飞行模式变化时同步“任务运行中”状态（用于拦截任务执行中下发新任务）
     on_MissionRunningChanged: control._publishTaskState()
 
-    // 只有“任务被替换”才清零：重连/重新下载同一个任务时 visualItems 也会重建，
-    // 但起点/终点/总圈数不变，已跑圈数保留（任务执行中上传也不清零）；
-    // 也刻意不在载具上锁时清零，否则“停到终点”后看不到 2/2。
+    // visualItems 重建时是否清零见 _afterVisualItemsReset()：
+    // 同一个任务（重连、重新下载、任务执行中重载）保持已跑圈数；
+    // 已判完成的任务被重载则当作新任务从 0 计。
+    // 也刻意不在载具上锁时清零，否则“停到终点”后看不到 3/3。
     Connections {
         target: control._flyMissionController
 
@@ -288,9 +290,20 @@ Item {
             control._updateLoopProgress(missionIndex)
         }
         function onVisualItemsReset() {
-            // 等绑定刷新到新任务的值以后再比较任务特征
-            Qt.callLater(control._checkMissionReplaced)
+            // 等绑定刷新到新任务的值以后再处理
+            Qt.callLater(control._afterVisualItemsReset)
         }
+    }
+
+    /// visualItems 重建（上传/下载/重连）后的处理：
+    /// 已完成的任务被重新上传时，即使路线特征没变也要当成一个新任务，计数清零重新计。
+    /// 运行中（未判完成）的任务重载不清零，保持原行为 —— 否则任务执行中上传会看到计数归零。
+    function _afterVisualItemsReset() {
+        if (_taskCompleted) {
+            control._resetLoopProgress()
+            return
+        }
+        control._checkMissionReplaced()
     }
 
     /// 任务被替换后：起点/终点/总圈数变了才清零，同一个任务（重连、重下载）保持已跑圈数

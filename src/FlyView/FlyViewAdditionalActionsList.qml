@@ -20,18 +20,7 @@ QtObject {
             action:     guidedController.actionContinueMission,
             visible:    guidedController.showContinueMission
         },
-        {
-            title:      guidedController.changeAltTitle,
-            text:       guidedController.changeAltMessage,
-            action:     guidedController.actionChangeAlt,
-            visible:    guidedController.showChangeAlt
-        },
-        {
-            title:      guidedController.changeLoiterRadiusTitle,
-            text:       guidedController.changeLoiterRadiusMessage,
-            action:     guidedController.actionChangeLoiterRadius,
-            visible:    guidedController.showChangeLoiterRadius
-        },
+        // “改变高度/改变盘旋半径”对无人船无意义，已移除（GuidedActionsController 里的对应动作逻辑保留）
         {
             title:      guidedController.landAbortTitle,
             text:       guidedController.landAbortMessage,
