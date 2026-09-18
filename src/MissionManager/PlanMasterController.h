@@ -175,6 +175,7 @@ signals:
     void userSelectedManualCreationChanged();
     void missionTaskRunningChanged       (bool missionTaskRunning);
     void missionTaskCompletedChanged     (bool missionTaskCompleted);
+    void missionUploadComplete           (void);       ///< 任务已写入载具（本次为上传，不是重连/下载）
 
 private slots:
     void _activeVehicleChanged(Vehicle* activeVehicle);

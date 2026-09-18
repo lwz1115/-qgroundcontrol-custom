@@ -275,6 +275,10 @@ void PlanMasterController::_sendMissionComplete(void)
         _missionController.showPlanFromManagerVehicle();
     }
 
+    // 任务已经写入载具，且只可能是“上传”（连接时走的都是加载/下载路径）：
+    // 飞行界面据此把循环计数当成一个新任务从 0 重新计，而重连/重新下载不会清零。
+    emit missionUploadComplete();
+
     if (_sendGeoFence) {
         _sendGeoFence = false;
         _sendRallyPoints = true;
