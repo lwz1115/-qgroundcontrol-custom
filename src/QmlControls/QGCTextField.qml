@@ -82,6 +82,16 @@ TextField {
         }
     }
 
+    // 带着校验错误被销毁时必须把计数还回去：
+    // 控件多在动态弹出的面板里（例如规划界面汉堡菜单），面板关掉销毁时若计数不减，
+    // globals.validationErrorCount 会永远大于 0，导致 allowViewSwitch() 一直拦住
+    // "切换界面"和"地图上加航点"，整个界面像卡死一样。
+    Component.onDestruction: {
+        if (validationError) {
+            globals.validationErrorCount--
+        }
+    }
+
     background: Rectangle {
         border.width:   control.validationError ? 2 : (qgcPal.globalTheme === QGCPalette.Light ? 1 : 0)
         border.color:   control.validationError ? qgcPal.colorRed : qgcPal.buttonBorder

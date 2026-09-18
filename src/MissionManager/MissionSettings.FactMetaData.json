@@ -16,7 +16,7 @@
     "shortDesc": "Mission loop count",
     "type":             "int32",
     "min":              1,
-    "max":              65535,
+    "max":              99,
     "default":          1
 },
 {

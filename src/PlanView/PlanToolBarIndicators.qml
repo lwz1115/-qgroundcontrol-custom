@@ -159,6 +159,10 @@ RowLayout {
             // For some strange reason using mainWindow in mapToItem doesn't work, so we use globals.parent instead which also gets us mainWindow
             position = mapToItem(globals.parent, position)
             var dropPanel = hamburgerDropPanelComponent.createObject(mainWindow, { clickRect: Qt.rect(position.x, position.y, 0, 0) })
+            // 关掉就销毁：面板是模态的，且里面可能留着“无效值”的输入框。
+            // 以前只是 close() 不销毁，面板会一直被 mainWindow 持有：既可能残留模态遮挡，
+            // 又把校验错误计数留在那里减不回去，导致之后切界面、加航点全被拦住。
+            dropPanel.closed.connect(function() { dropPanel.destroy() })
             dropPanel.open()
         }
     }
