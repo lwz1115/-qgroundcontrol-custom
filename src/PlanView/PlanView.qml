@@ -35,6 +35,22 @@ Item {
     property bool   _addROIOnClick: false
     property bool   _addWaypointOnClick: false
 
+    // 任务执行中（已解锁 + 任务模式）且还没跑完时，禁止改航线；
+    // 该状态由飞行界面遥测栏写回飞行界面的 PlanMasterController
+    readonly property bool _taskLocked: {
+        const flyController = globals.planMasterControllerFlyView
+        return flyController ? (flyController.missionTaskRunning && !flyController.missionTaskCompleted) : false
+    }
+
+    /// 任务执行中拦截改航线/上传；返回 false 表示已拦截并给过提示
+    function _checkTaskNotLocked() {
+        if (_taskLocked) {
+            QGroundControl.showMessageDialog(mainWindow, qsTr("任务执行中"), qsTr("任务执行中，禁止修改航线或上传新任务。"))
+            return false
+        }
+        return true
+    }
+
     readonly property int _layerMission: PlanEditLayers.layerMission
     readonly property int _layerFence: PlanEditLayers.layerFence
     readonly property int _layerRally: PlanEditLayers.layerRally
@@ -170,6 +186,11 @@ Item {
     }
 
     function insertSimpleItemAfterCurrent(coordinate) {
+        // 任务执行中（已解锁 + 任务模式）且未跑完时不允许改航线
+        if (!_checkTaskNotLocked()) {
+            return
+        }
+
         // 采样点防重复：新点与已有航点距离小于最小间距时拒绝添加，
         // 否则同一位置很容易被重复勾选。下标从 1 开始，跳过任务设置项（起飞点）。
         const minSpacing = _appSettings.samplePointMinSpacing.value

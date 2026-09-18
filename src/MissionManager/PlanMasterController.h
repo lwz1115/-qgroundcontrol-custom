@@ -60,6 +60,10 @@ public:
     Q_PROPERTY(QStringList              saveNameFilters         READ saveNameFilters                        CONSTANT)                               ///< File filter list saving plan files
     Q_PROPERTY(QmlObjectListModel*      planCreators            READ planCreators                           NOTIFY planCreatorsChanged)
     Q_PROPERTY(bool                     userSelectedManualCreation READ userSelectedManualCreation WRITE setUserSelectedManualCreation NOTIFY userSelectedManualCreationChanged) ///< true: User is not using a template to create the plan
+    // 任务运行状态：QGC 没有“任务完成”信号，完成判定在飞行界面（TelemetryValuesBar）里做，
+    // 再写回这里，供规划界面拦截“任务执行中改航线/上传”。
+    Q_PROPERTY(bool                     missionTaskRunning      READ missionTaskRunning     WRITE setMissionTaskRunning     NOTIFY missionTaskRunningChanged)      ///< true: 载具已解锁且处于任务模式
+    Q_PROPERTY(bool                     missionTaskCompleted    READ missionTaskCompleted   WRITE setMissionTaskCompleted   NOTIFY missionTaskCompletedChanged)    ///< true: 本趟任务已跑满总圈数并停止
 
     /// Should be called immediately upon Component.onCompleted.
     Q_INVOKABLE void start(void);
@@ -104,6 +108,24 @@ public:
     RallyPointController* rallyPointController(void) { return &_rallyPointController; }
 
     bool offline(void) const { return _offline; }
+    bool missionTaskRunning(void) const { return _missionTaskRunning; }
+    bool missionTaskCompleted(void) const { return _missionTaskCompleted; }
+    void setMissionTaskRunning(bool missionTaskRunning)
+    {
+        if (_missionTaskRunning == missionTaskRunning) {
+            return;
+        }
+        _missionTaskRunning = missionTaskRunning;
+        emit missionTaskRunningChanged(_missionTaskRunning);
+    }
+    void setMissionTaskCompleted(bool missionTaskCompleted)
+    {
+        if (_missionTaskCompleted == missionTaskCompleted) {
+            return;
+        }
+        _missionTaskCompleted = missionTaskCompleted;
+        emit missionTaskCompletedChanged(_missionTaskCompleted);
+    }
     bool containsItems(void) const;
     bool showCreateFromTemplate(void) const { return !containsItems() && !_userSelectedManualCreation; }
     bool syncInProgress(void) const;
@@ -151,6 +173,8 @@ signals:
     void managerVehicleChanged(Vehicle* managerVehicle);
     void promptForPlanUsageOnVehicleChange(void);
     void userSelectedManualCreationChanged();
+    void missionTaskRunningChanged       (bool missionTaskRunning);
+    void missionTaskCompletedChanged     (bool missionTaskCompleted);
 
 private slots:
     void _activeVehicleChanged(Vehicle* activeVehicle);
@@ -203,6 +227,8 @@ private:
     bool _deleteWhenSendCompleted = false;
     bool _dirtyForSave = false;
     bool _dirtyForUpload = false;
+    bool _missionTaskRunning = false;         ///< 由飞行界面遥测栏写入：载具已解锁且处于任务模式
+    bool _missionTaskCompleted = false;       ///< 由飞行界面遥测栏写入：本趟任务已跑满总圈数并停止
     bool _showCreateFromTemplate = true;
     bool _suppressOverallDirtyUpdate = false;
     QmlObjectListModel* _planCreators = nullptr;

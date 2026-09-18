@@ -71,10 +71,24 @@ Item {
         return endIndex
     }
 
-    property int    _completedLoops:   0      ///< 已完成的圈数：到达最后一个航点即 +1
-    property int    _lastMissionIndex: -1     ///< 上一次的 MISSION_CURRENT 序号，用来识别“刚到达终点”
+    property int    _completedLoops:   0      ///< 已完成的圈数：离开终点（或停在终点判定完成）才算一圈
+    property int    _lastMissionIndex: -1     ///< 上一次的 MISSION_CURRENT 序号
     property bool   _loopRunActive:    false  ///< 本趟是否已起步：起步后才允许计圈
+    property bool   _atLoopEnd:        false  ///< 正停在终点（到达但还没离开，不算完成）
+    property bool   _taskCompleted:    false  ///< 本趟任务已跑满总圈数并停止
     property string _loopMissionKey:   ""     ///< 本趟任务的特征（起点/终点/总圈数），用来识别“任务是否被替换”
+
+    /// 总圈数（船上已生效值），可能为 null（拿不到就不做完成判定）
+    readonly property var _totalLoops: control._missionLoopCount
+
+    /// 任务完成判定超时：到达终点后序号长时间不变，就认为“船已停在终点、任务结束”
+    readonly property int _taskCompleteDetectTimeoutMs: 8000
+
+    /// 任务运行中：已解锁 + 处于任务模式（与 MissionController::sendToVehiclePreCheck 的判定一致）
+    readonly property bool _missionRunning: {
+        const vehicle = control._vehicle
+        return vehicle ? (vehicle.armed && (vehicle.flightMode === vehicle.missionFlightMode)) : false
+    }
 
     // 显示“已循环次数/总次数”，例如 3/5；拿不到总次数时显示 “--”
     readonly property string _loopCountText: _missionLoopCount === null ? "--" : (_completedLoops + "/" + _missionLoopCount)
@@ -84,40 +98,93 @@ Item {
         return control._loopStartIndex + ":" + control._loopEndIndex + ":" + control._missionLoopCount
     }
 
+    /// 把“任务运行中/已完成”写回飞行界面的任务控制器，供规划界面拦截“任务执行中改航线/上传”。
+    /// 只在主遥测栏写（多机卡片不写），避免多机时相互覆盖。
+    function _publishTaskState() {
+        if (specificVehicleForCard) {
+            return
+        }
+        const planController = globals.planMasterControllerFlyView
+        if (planController) {
+            planController.missionTaskRunning = control._missionRunning
+            planController.missionTaskCompleted = control._taskCompleted
+        }
+    }
+
     // 回到“本趟还没起步”的状态，计数清零
     function _resetLoopProgress() {
         _completedLoops = 0
         _lastMissionIndex = -1
         _loopRunActive = false
+        _atLoopEnd = false
+        _taskCompleted = false
         _loopMissionKey = control._loopMissionKeyOf()
+        completeDetectTimer.stop()
+        control._publishTaskState()
     }
 
-    // 计圈规则：只看“是否到达最后一个航点”，跳点不改圈次、跳点到终点同样算到达。
+    // 计圈规则（MISSION_CURRENT 是“开始前往该航点”时上报，不是“到达”时上报）：
     //   a) 起步：本趟未起步且序号已进入任务范围 → 清零重计
-    //   b) 新一趟：已起步、又回到起点、且上一趟已计满总圈数 → 清零重计（跑完后再跑同一任务）
-    //   c) 到终点：已起步、到达终点、且上一次不是终点 → 完成一圈 +1（末圈也 +1）
-    //   d) 其余只记录上一次序号
+    //   b) 新一趟：本趟已完成、又回到起点 → 清零重计
+    //   c) 到达终点：只标记“正停在终点”，并启动完成判定定时器，此时不 +1
+    //   d) 离开终点：这一圈才算完成 → +1；跑满总圈数则标记任务已完成
+    //   e) 其余只记录上一次序号；总圈数未知时不做完成判定，只按 d) 计圈
     function _updateLoopProgress(missionIndex) {
         if ((_loopStartIndex < 0) || (_loopEndIndex < _loopStartIndex)) {
             return
         }
 
-        const totalLoops = (_missionLoopCount === null) ? -1 : _missionLoopCount
         if (!_loopRunActive) {
             if (missionIndex >= _loopStartIndex) {
                 _resetLoopProgress()
                 _loopRunActive = true
+                control._publishTaskState()
             }
-        } else if ((missionIndex === _loopStartIndex) && (totalLoops > 0) && (_completedLoops >= totalLoops)) {
-            // 上一趟已经跑满，又回到起点 → 新的一趟，从 0 重新计
+        } else if (_taskCompleted && (missionIndex === _loopStartIndex)) {
             _resetLoopProgress()
             _loopRunActive = true
-        } else if ((missionIndex === _loopEndIndex) && (_lastMissionIndex !== _loopEndIndex)) {
+            control._publishTaskState()
+        } else if (!_atLoopEnd && (missionIndex === _loopEndIndex)) {
+            _atLoopEnd = true
+            if (_totalLoops !== null) {
+                completeDetectTimer.restart()
+            }
+        } else if (_atLoopEnd && (missionIndex !== _loopEndIndex)) {
+            completeDetectTimer.stop()
+            _atLoopEnd = false
             _completedLoops++
+            if ((_totalLoops !== null) && (_completedLoops >= _totalLoops)) {
+                _taskCompleted = true
+                control._publishTaskState()
+            }
         }
 
         _lastMissionIndex = missionIndex
     }
+
+    // 到达终点后序号一直不变 → 判定“船已停在终点、任务结束”，补上最后一圈。
+    // 只是一次性的完成检测，不是周期轮询任务，也不触发任何上传。
+    // 注：停船由飞控处理（循环次数用尽后不再跳回、任务结束）；若某些固件需要 QGC 主动下发
+    // HOLD/暂停命令，可在这个函数里补（飞控端需配合上报 COMPLETED）。
+    function _handleTaskCompleteDetected() {
+        if (!_loopRunActive || !_atLoopEnd) {
+            return
+        }
+        if ((_totalLoops !== null) && (_completedLoops < _totalLoops)) {
+            _completedLoops++
+        }
+        _atLoopEnd = false
+        _taskCompleted = true
+        control._publishTaskState()
+    }
+
+    Timer {
+        id: completeDetectTimer
+        interval: control._taskCompleteDetectTimeoutMs
+    }
+
+    // 解锁/飞行模式变化时同步“任务运行中”状态（用于拦截任务执行中改航线/上传）
+    on_MissionRunningChanged: control._publishTaskState()
 
     // 只有“任务被替换”才清零：重连/重新下载同一个任务时 visualItems 也会重建，
     // 但起点/终点/总圈数不变，已跑圈数保留（任务执行中上传也不清零）；
@@ -216,6 +283,13 @@ Item {
             QGCLabel { text: control._timeText;       Layout.preferredWidth: control._valueWidth }
             QGCLabel { text: qsTr("Date:");          Layout.preferredWidth: control._labelWidth; horizontalAlignment: Text.AlignRight }
             QGCLabel { text: control._dateText;       Layout.preferredWidth: control._valueWidth }
+        }
+
+        // 状态区：任务跑满总圈数并停止后提示“任务已完成”
+        QGCLabel {
+            text:    qsTr("任务已完成")
+            color:   qgcPal.colorGreen
+            visible: control._taskCompleted
         }
     }
 
