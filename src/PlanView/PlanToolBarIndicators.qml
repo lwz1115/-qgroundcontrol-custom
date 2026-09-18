@@ -194,6 +194,20 @@ RowLayout {
                             Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 5
                             Layout.alignment:       Qt.AlignVCenter
                         }
+
+                        // 循环跑完回 HOME 点：勾选后上传的任务末尾会带一条 RTL（排在 DO_JUMP 之后）
+                        QGCCheckBox {
+                            text:               qsTr("循环完返回HOME点")
+                            visible:            _visualItems.count > 0
+                            checked:            _visualItems.count > 0 ? _visualItems.get(0).returnHomeAfterLoop.rawValue : false
+                            Layout.alignment:   Qt.AlignVCenter
+
+                            onClicked: {
+                                if (_visualItems.count > 0) {
+                                    _visualItems.get(0).returnHomeAfterLoop.rawValue = checked
+                                }
+                            }
+                        }
                     }
 
                     QGCButton {

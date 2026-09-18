@@ -18,6 +18,7 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
     , _managerVehicle                   (masterController->managerVehicle())
     , _plannedHomePositionAltitudeFact  (0, _plannedHomePositionAltitudeName,   FactMetaData::valueTypeDouble)
     , _loopCountFact                    (1, _loopCountName,                       FactMetaData::valueTypeInt32)
+    , _returnHomeAfterLoopFact          (false, _returnHomeAfterLoopName,         FactMetaData::valueTypeBool)
     , _cameraSection                    (masterController)
     , _speedSection                     (masterController)
 {
@@ -35,6 +36,10 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
     // 循环次数属于任务本身：新建任务以全局设置作为初始值，之后由 .plan 携带
     _loopCountFact.setMetaData(_metaDataMap[_loopCountName]);
     _loopCountFact.setRawValue(SettingsManager::instance()->appSettings()->missionLoopCount()->rawValue());
+
+    // “循环完返回 HOME 点”也属于任务本身：默认不勾选，由 .plan / 船上任务携带
+    _returnHomeAfterLoopFact.setMetaData(_metaDataMap[_returnHomeAfterLoopName]);
+    _returnHomeAfterLoopFact.setRawValue(false);
 
     _cameraSection.setAvailable(true);
     _speedSection.setAvailable(true);
@@ -57,6 +62,7 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
 
     connect(&_plannedHomePositionAltitudeFact,  &Fact::rawValueChanged,                 this, &MissionSettingsItem::_updateAltitudeInCoordinate);
     connect(&_loopCountFact,                    &Fact::rawValueChanged,                 this, &MissionSettingsItem::_setDirty);
+    connect(&_returnHomeAfterLoopFact,      &Fact::rawValueChanged,         this, &MissionSettingsItem::_setDirty);
 
     connect(_managerVehicle, &Vehicle::homePositionChanged, this, &MissionSettingsItem::_updateFlyViewHomePosition);
     _updateFlyViewHomePosition(_managerVehicle->homePosition());
@@ -158,44 +164,65 @@ bool MissionSettingsItem::addMissionEndAction(QList<MissionItem*>& items, int se
         return false;
     }
 
-    // 无人船也要能生成循环用的 DO_JUMP：rover() 已覆盖 ArduRover(GROUND_ROVER) 与标准水面船
+    // 无人船也要能生成循环用的 DO_JUMP / RTL：rover() 已覆盖 ArduRover(GROUND_ROVER) 与标准水面船
     // SURFACE_BOAT，这里再放行本项目自定义的 MAV_TYPE_TRACK
     if (!_managerVehicle->rover() && (_managerVehicle->vehicleType() != Vehicle::MAV_TYPE_TRACK)) {
         return false;
     }
 
+    bool endActionSet = false;
     const int loopCount = _loopCountFact.rawValue().toInt();
-    if (loopCount <= 1) {
-        return false;
-    }
 
-    int firstWaypointSequence = -1;
-    for (const MissionItem* item: items) {
-        if (item->command() == MAV_CMD_NAV_WAYPOINT && item->sequenceNumber() > 0) {
-            firstWaypointSequence = item->sequenceNumber();
-            break;
+    // 循环：沿用原有 DO_JUMP（只有大于 1 圈才需要）
+    if (loopCount > 1) {
+        int firstWaypointSequence = -1;
+        for (const MissionItem* item: items) {
+            if (item->command() == MAV_CMD_NAV_WAYPOINT && item->sequenceNumber() > 0) {
+                firstWaypointSequence = item->sequenceNumber();
+                break;
+            }
+        }
+
+        if (firstWaypointSequence >= 0) {
+            auto* loopItem = new MissionItem(seqNum++,
+                                             MAV_CMD_DO_JUMP,
+                                             MAV_FRAME_GLOBAL,
+                                             firstWaypointSequence,
+                                             loopCount - 1,
+                                             0,
+                                             0,
+                                             0,
+                                             0,
+                                             0,
+                                             true,
+                                             false,
+                                             missionItemParent);
+            items.append(loopItem);
+            endActionSet = true;
         }
     }
 
-    if (firstWaypointSequence < 0) {
-        return false;
+    // 循环跑完返回 HOME：必须排在 DO_JUMP 之后——跳次耗尽后才会执行到它。
+    // 单次任务（loopCount=1、没有 DO_JUMP）勾选后同样追加。
+    if (_returnHomeAfterLoopFact.rawValue().toBool()) {
+        auto* rtlItem = new MissionItem(seqNum,
+                                        MAV_CMD_NAV_RETURN_TO_LAUNCH,
+                                        MAV_FRAME_MISSION,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        true,
+                                        false,
+                                        missionItemParent);
+        items.append(rtlItem);
+        endActionSet = true;
     }
 
-    auto* loopItem = new MissionItem(seqNum,
-                                     MAV_CMD_DO_JUMP,
-                                     MAV_FRAME_GLOBAL,
-                                     firstWaypointSequence,
-                                     loopCount - 1,
-                                     0,
-                                     0,
-                                     0,
-                                     0,
-                                     0,
-                                     true,
-                                     false,
-                                     missionItemParent);
-    items.append(loopItem);
-    return true;
+    return endActionSet;
 }
 
 bool MissionSettingsItem::scanForMissionSettings(QmlObjectListModel* visualItems, int scanIndex)

@@ -18,6 +18,12 @@
     "min":              1,
     "max":              65535,
     "default":          1
+},
+{
+    "name":             "MissionReturnHomeAfterLoop",
+    "shortDesc": "Return home after the mission loops complete",
+    "type":             "bool",
+    "default":          false
 }
 ]
 }

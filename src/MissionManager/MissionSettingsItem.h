@@ -20,11 +20,14 @@ public:
     Q_PROPERTY(QObject* cameraSection               READ cameraSection                                          CONSTANT)
     Q_PROPERTY(QObject* speedSection                READ speedSection                                           CONSTANT)
     Q_PROPERTY(Fact*    loopCount                   READ loopCount                                              CONSTANT)
+    /// 循环跑完是否返回 HOME 点（属于任务自身，随 .plan 保存/加载）
+    Q_PROPERTY(Fact*    returnHomeAfterLoop         READ returnHomeAfterLoop                                   CONSTANT)
 
     Fact*           plannedHomePositionAltitude (void) { return &_plannedHomePositionAltitudeFact; }
     CameraSection*  cameraSection               (void) { return &_cameraSection; }
     SpeedSection*   speedSection                (void) { return &_speedSection; }
     Fact*           loopCount                   (void) { return &_loopCountFact; }
+    Fact*           returnHomeAfterLoop         (void) { return &_returnHomeAfterLoopFact; }
 
     /// Scans the loaded items for settings items
     bool scanForMissionSettings(QmlObjectListModel* visualItems, int scanIndex);
@@ -93,6 +96,8 @@ private:
     Fact            _plannedHomePositionAltitudeFact;
     /// 任务自身的循环次数（随 .plan 保存/加载），不再读全局设置
     Fact            _loopCountFact;
+    /// 循环跑完是否返回 HOME 点（勾选后在任务末尾追加一条 RTL）
+    Fact            _returnHomeAfterLoopFact;
     int             _sequenceNumber =                   0;
     CameraSection   _cameraSection;
     SpeedSection    _speedSection;
@@ -101,4 +106,5 @@ private:
 
     static constexpr const char* _plannedHomePositionAltitudeName = "PlannedHomePositionAltitude";
     static constexpr const char* _loopCountName =                   "MissionLoopCount";
+    static constexpr const char* _returnHomeAfterLoopName =         "MissionReturnHomeAfterLoop";
 };

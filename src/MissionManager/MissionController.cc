@@ -582,7 +582,8 @@ void MissionController::_setupNewVisualItems(QmlObjectListModel* newItems)
     _updateLoopCountFromMissionItems();
 }
 
-/// 循环次数属于任务本身：从任务项里的 DO_JUMP 反推（.plan 里另有显式字段，优先级更高）。
+/// 循环次数与"循环完返回 HOME"都属于任务本身：从任务项里的 DO_JUMP / RTL 反推
+/// （.plan 里另有显式字段，优先级更高）。
 /// 只在存在实际任务项时推导；写入时阻塞信号，避免刚加载完的任务被标成已修改。
 void MissionController::_updateLoopCountFromMissionItems()
 {
@@ -592,17 +593,28 @@ void MissionController::_updateLoopCountFromMissionItems()
 
     auto* loopCountFact = _settingsItem->loopCount();
     int loopCount = 1;
+    bool returnHomeAfterLoop = false;
     for (int i = 0; i < _visualItems->count(); i++) {
         SimpleMissionItem* item = qobject_cast<SimpleMissionItem*>(_visualItems->get(i));
-        if (item && (item->command() == MAV_CMD_DO_JUMP)) {
+        if (!item) {
+            continue;
+        }
+        if (item->command() == MAV_CMD_DO_JUMP) {
             loopCount = static_cast<int>(item->missionItem().param2()) + 1;
-            break;
+        } else if (item->command() == MAV_CMD_NAV_RETURN_TO_LAUNCH) {
+            // 任务末尾的 RTL 就是"循环完返回 HOME"的产物
+            returnHomeAfterLoop = true;
         }
     }
 
-    const bool signalsWereBlocked = loopCountFact->blockSignals(true);
+    const bool loopCountSignalsWereBlocked = loopCountFact->blockSignals(true);
     loopCountFact->setRawValue(loopCount);
-    loopCountFact->blockSignals(signalsWereBlocked);
+    loopCountFact->blockSignals(loopCountSignalsWereBlocked);
+
+    auto* returnHomeAfterLoopFact = _settingsItem->returnHomeAfterLoop();
+    const bool returnHomeSignalsWereBlocked = returnHomeAfterLoopFact->blockSignals(true);
+    returnHomeAfterLoopFact->setRawValue(returnHomeAfterLoop);
+    returnHomeAfterLoopFact->blockSignals(returnHomeSignalsWereBlocked);
 }
 
 void MissionController::removeAll(void)
@@ -626,6 +638,7 @@ bool MissionController::_loadJsonMissionFileV2(const QJsonObject& json, QmlObjec
         { _jsonHoverSpeedKey,               QJsonValue::Double, false },
         { _jsonGlobalPlanAltitudeModeKey,   QJsonValue::Double, false },
         { _jsonLoopCountKey,                QJsonValue::Double, false },
+        { _jsonReturnHomeAfterLoopKey,      QJsonValue::Bool,   false },
     };
     if (!JsonParsing::validateKeys(json, rootKeyInfoList, errorString)) {
         return false;
@@ -860,13 +873,18 @@ bool MissionController::load(const QJsonObject& json, QString& errorString)
     }
     _initLoadedVisualItems(loadedVisualItems);
 
-    // 循环次数随任务保存；旧文件没有该字段时保留默认值。
+    // 循环次数/返回 HOME 随任务保存；旧文件没有这些字段时保留默认值。
     // 阻塞信号是为了不把刚加载的任务标成"已修改"。
     if (_settingsItem) {
         auto* loopCountFact = _settingsItem->loopCount();
         const bool signalsWereBlocked = loopCountFact->blockSignals(true);
         loopCountFact->setRawValue(json[_jsonLoopCountKey].toInt(loopCountFact->rawValue().toInt()));
         loopCountFact->blockSignals(signalsWereBlocked);
+
+        auto* returnHomeFact = _settingsItem->returnHomeAfterLoop();
+        const bool returnHomeSignalsWereBlocked = returnHomeFact->blockSignals(true);
+        returnHomeFact->setRawValue(json[_jsonReturnHomeAfterLoopKey].toBool(returnHomeFact->rawValue().toBool()));
+        returnHomeFact->blockSignals(returnHomeSignalsWereBlocked);
     }
 
     return true;
@@ -919,6 +937,7 @@ void MissionController::save(QJsonObject& json)
     GeoJsonHelper::saveGeoCoordinate(settingsItem->coordinate(), true /* writeAltitude */, coordinateValue);
     json[_jsonPlannedHomePositionKey]       = coordinateValue;
     json[_jsonLoopCountKey]                 = settingsItem->loopCount()->rawValue().toInt();
+    json[_jsonReturnHomeAfterLoopKey]       = settingsItem->returnHomeAfterLoop()->rawValue().toBool();
     json[_jsonFirmwareTypeKey]              = _controllerVehicle->firmwareType();
     json[_jsonVehicleTypeKey]               = _controllerVehicle->vehicleType();
     json[_jsonCruiseSpeedKey]               = _controllerVehicle->defaultCruiseSpeed();

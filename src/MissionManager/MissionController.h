@@ -465,6 +465,7 @@ private:
     static constexpr const char* _jsonParamsKey =                 "params";
     static constexpr const char* _jsonGlobalPlanAltitudeModeKey = "globalPlanAltitudeMode";
     static constexpr const char* _jsonLoopCountKey =                 "loopCount";
+    static constexpr const char* _jsonReturnHomeAfterLoopKey =      "returnHomeAfterLoop";
 
     static constexpr int   _missionFileVersion =            2;
 };
