@@ -221,11 +221,17 @@ bool MissionController::_convertToMissionItems(QmlObjectListModel* visualMission
         if (!trailingItem) {
             break;
         }
-        const MAV_CMD trailingCommand = trailingItem->command();
+        const MAV_CMD trailingCommand = trailingItem->mavCommand();
         if ((trailingCommand != MAV_CMD_DO_JUMP) && (trailingCommand != MAV_CMD_NAV_RETURN_TO_LAUNCH)) {
             break;
         }
         itemCount--;
+    }
+
+    // 控制台可见：确认这次上传确实把这些派生项丢掉了（没看到这行就说明这份计划里没有多余跳点）
+    const int droppedEndActions = visualMissionItems->count() - itemCount;
+    if (droppedEndActions > 0) {
+        qCDebug(MissionControllerLog) << "_convertToMissionItems: dropped generated end actions" << droppedEndActions;
     }
 
     bool endActionSet = false;
