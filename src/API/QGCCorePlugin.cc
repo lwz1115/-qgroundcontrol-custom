@@ -86,6 +86,10 @@ const QVariantList &QGCCorePlugin::analyzePages()
             QUrl::fromUserInput(QStringLiteral("qrc:/qmlimages/MAVLinkInspector.svg")))),
 #endif
         QVariant::fromValue(new QmlComponentInfo(
+            tr("水质监测"),
+            QUrl::fromUserInput(QStringLiteral("qrc:/qml/QGroundControl/AnalyzeView/WaterQuality/WaterQualityPage.qml")),
+            QUrl::fromUserInput(QStringLiteral("qrc:/qmlimages/WaterQualityIcon.svg")))),
+        QVariant::fromValue(new QmlComponentInfo(
             tr("Onboard Logs"),
             QUrl::fromUserInput(QStringLiteral("qrc:/qml/QGroundControl/AnalyzeView/OnboardLogs/OnboardLogPage.qml")),
             QUrl::fromUserInput(QStringLiteral("qrc:/qmlimages/OnboardLogIcon.svg")),

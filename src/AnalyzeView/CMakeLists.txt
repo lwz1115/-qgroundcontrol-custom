@@ -8,6 +8,7 @@ add_subdirectory(LogViewer)
 add_subdirectory(MAVLinkConsole)
 add_subdirectory(MAVLinkInspector)
 add_subdirectory(OnboardLogs)
+add_subdirectory(WaterQuality)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -30,6 +31,9 @@ qt_add_qml_module(AnalyzeViewModule
         LogViewer/LogViewerPage.qml
         OnboardLogs/OnboardLogPage.qml
         Vibration/VibrationPage.qml
+        WaterQuality/WaterQualityPage.qml
+        WaterQuality/QualityLineChart.qml
+        WaterQuality/QualityHeatmap.qml
     NO_PLUGIN
 )
 
@@ -45,6 +49,8 @@ set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/OnboardLogs/OnboardLogI
     PROPERTIES QT_RESOURCE_ALIAS "OnboardLogIcon.svg")
 set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/Vibration/VibrationPageIcon.png"
     PROPERTIES QT_RESOURCE_ALIAS "VibrationPageIcon")
+set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/WaterQuality/WaterQualityIcon.svg"
+    PROPERTIES QT_RESOURCE_ALIAS "WaterQualityIcon.svg")
 
 qt_add_resources(${CMAKE_PROJECT_NAME} analyzeview_qmlimages
     PREFIX "/qmlimages"
@@ -56,4 +62,5 @@ qt_add_resources(${CMAKE_PROJECT_NAME} analyzeview_qmlimages
         "${CMAKE_CURRENT_SOURCE_DIR}/MAVLinkInspector/MAVLinkInspector.svg"
         "${CMAKE_CURRENT_SOURCE_DIR}/OnboardLogs/OnboardLogIcon.svg"
         "${CMAKE_CURRENT_SOURCE_DIR}/Vibration/VibrationPageIcon.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/WaterQuality/WaterQualityIcon.svg"
 )

@@ -24257,4 +24257,149 @@ If a vehicle still has this key configured, you will no longer be able to commun
       <translation>地面站 GPS 数据超过 5 秒未更新</translation>
     </message>
   </context>
+  <context>
+    <name>WaterQualityPage</name>
+    <message>
+      <source>Import water quality monitoring data (Excel .xlsx or .csv) and view each parameter over time as a line chart or a heat map.</source>
+      <translation>导入水质监测数据（Excel .xlsx 或 .csv），用折线图或热力图查看各参数随时间的变化。</translation>
+    </message>
+    <message>
+      <source>📁 Import Excel</source>
+      <translation>📁 导入 Excel</translation>
+    </message>
+    <message>
+      <source>No data imported yet</source>
+      <translation>尚未导入数据</translation>
+    </message>
+    <message>
+      <source>%1 records</source>
+      <translation>共 %1 条记录</translation>
+    </message>
+    <message>
+      <source>Line Chart</source>
+      <translation>折线图</translation>
+    </message>
+    <message>
+      <source>Heat Map</source>
+      <translation>热力图</translation>
+    </message>
+    <message>
+      <source>Time range:</source>
+      <translation>时间范围：</translation>
+    </message>
+    <message>
+      <source>to</source>
+      <translation>至</translation>
+    </message>
+    <message>
+      <source>Reset Zoom</source>
+      <translation>重置缩放</translation>
+    </message>
+    <message>
+      <source>Right axis</source>
+      <translation>右轴</translation>
+    </message>
+    <message>
+      <source>Left axis</source>
+      <translation>左轴</translation>
+    </message>
+    <message>
+      <source>Select water quality data file</source>
+      <translation>选择水质数据文件</translation>
+    </message>
+    <message>
+      <source>Excel workbook (*.xlsx)</source>
+      <translation>Excel 工作簿 (*.xlsx)</translation>
+    </message>
+    <message>
+      <source>CSV table (*.csv)</source>
+      <translation>CSV 表格 (*.csv)</translation>
+    </message>
+    <message>
+      <source>All Files (*)</source>
+      <translation>所有文件 (*)</translation>
+    </message>
+    <message>
+      <source>Time:</source>
+      <translation>时间：</translation>
+    </message>
+    <message>
+      <source> (right axis)</source>
+      <translation>（右轴）</translation>
+    </message>
+    <message>
+      <source> (left axis)</source>
+      <translation>（左轴）</translation>
+    </message>
+  </context>
+  <context>
+    <name>QualityHeatmap</name>
+    <message>
+      <source>Low</source>
+      <translation>低</translation>
+    </message>
+    <message>
+      <source>High</source>
+      <translation>高</translation>
+    </message>
+  </context>
+  <context>
+    <name>WaterQualityLog</name>
+    <message>
+      <source>No file selected</source>
+      <translation>未选择文件</translation>
+    </message>
+    <message>
+      <source>File does not exist: %1</source>
+      <translation>文件不存在：%1</translation>
+    </message>
+    <message>
+      <source>The legacy .xls format is not supported yet. Save it as .xlsx or .csv and import again.</source>
+      <translation>暂不支持 .xls 老格式，请在 Excel 或 WPS 里另存为 .xlsx / .csv 后再导入。</translation>
+    </message>
+    <message>
+      <source>Unsupported file type .%1 (supported: .xlsx, .csv)</source>
+      <translation>不支持的文件类型 .%1（支持 .xlsx 与 .csv）</translation>
+    </message>
+    <message>
+      <source>Unable to open file: %1</source>
+      <translation>无法打开文件：%1</translation>
+    </message>
+    <message>
+      <source>The file contains no usable data rows</source>
+      <translation>文件里没有可用的数据行</translation>
+    </message>
+    <message>
+      <source>No worksheet found in this xlsx file (it may not be a valid Excel file)</source>
+      <translation>这个 xlsx 里没找到工作表（可能不是有效的 Excel 文件）</translation>
+    </message>
+    <message>
+      <source>Failed to read the worksheet: %1</source>
+      <translation>读取工作表失败：%1</translation>
+    </message>
+    <message>
+      <source>empty data</source>
+      <translation>数据为空</translation>
+    </message>
+    <message>
+      <source>The worksheet contains no usable data rows</source>
+      <translation>工作表里没有可用的数据行</translation>
+    </message>
+    <message>
+      <source>At least one header row and one data row are required</source>
+      <translation>至少需要一行表头和一行数据</translation>
+    </message>
+    <message>
+      <source>The table needs at least two columns: time in the first column, water quality parameters from the second column on</source>
+      <translation>表格至少要有两列：第 1 列是时间，第 2 列起是水质参数</translation>
+    </message>
+    <message>
+      <source>No valid timestamps found in the first column</source>
+      <translation>第 1 列没有解析出有效的时间数据</translation>
+    </message>
+    <message>
+      <source>Parameter %1</source>
+      <translation>参数 %1</translation>
+    </message>
+  </context>
 </TS>
