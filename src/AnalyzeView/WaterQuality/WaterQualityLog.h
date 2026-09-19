@@ -3,6 +3,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QStringList>
 #include <QtCore/QVariantList>
+#include <QtCore/QVariantMap>
 #include <QtCore/QVector>
 #include <QtQmlIntegration/QtQmlIntegration>
 
@@ -16,8 +17,8 @@
 ///
 /// 表格约定（自适应，无需固定列名）：
 ///   · 第 1 行是表头，除第 1 列外每个表头就是一条水质参数名；
-///   · 第 1 列是时间：优先按日期时间文本解析，其次按数值（当作秒，或按 excelTimeBase 参数
-///     当作 Excel 日期序列号）。
+///   · 第 1 列是时间：优先按日期时间文本解析，其次按数值（较小的数值当作秒，
+///     Excel 日期序列号范围内的大数值按序列号换算成时间）。
 ///
 /// 时间轴的 X 值统一用 "秒"（相对导入数据的第一条记录），与板载日志页面一致，
 /// 这样图表轴、光标、缩放都能直接复用同一套交互。
@@ -71,6 +72,16 @@ public:
     /// 返回每个（参数, 列）格的平均值，格式 [[row0...], [row1...], ...]（行=参数），
     /// 空格子用 NaN 表示，供界面直接做颜色映射。
     Q_INVOKABLE QVariantList heatmapGrid(double minTime, double maxTime, int columnCount);
+
+signals:
+    /// 数据是否已导入发生变化
+    void loadedChanged();
+    /// 错误描述发生变化
+    void errorStringChanged();
+    /// 数据源文件名发生变化
+    void fileNameChanged();
+    /// 参数名 / 采样点 / 时间范围发生变化
+    void dataChanged();
 
 private:
     bool _loadCsv (const QString& filePath);
