@@ -4535,25 +4535,25 @@ Click Ok to start the auto-tuning process.
 </translation>
     </message>
     <message>
-      <source>WARNING!        
+      <source>WARNING!
 
-The auto-tuning procedure should be executed with caution and requires the vehicle to fly stable enough before attempting the procedure!         
+The auto-tuning procedure should be executed with caution and requires the vehicle to fly stable enough before attempting the procedure!
 
-Before starting the auto-tuning process, make sure that:         
-1. You have read the auto-tuning guide and have followed the preliminary steps         
-2. The current control gains are good enough to stabilize the drone in presence of medium disturbances         
-3. You are ready to abort the auto-tuning sequence by moving the RC sticks, if anything unexpected happens.         
+Before starting the auto-tuning process, make sure that:
+1. You have read the auto-tuning guide and have followed the preliminary steps
+2. The current control gains are good enough to stabilize the drone in presence of medium disturbances
+3. You are ready to abort the auto-tuning sequence by moving the RC sticks, if anything unexpected happens.
 
 Click Ok to start the auto-tuning process.
 </source>
-      <translation>警告！        
+      <translation>警告！
 
-自动调参过程需谨慎执行，且要求飞行器在尝试前已具备足够的飞行稳定性！         
+自动调参过程需谨慎执行，且要求飞行器在尝试前已具备足够的飞行稳定性！
 
-开始自动调参前，请确认：         
-1. 您已阅读自动调参指南并完成准备工作         
-2. 当前控制增益足以在中等扰动下稳定机体         
-3. 若出现意外，您能随时通过拨动遥控器摇杆中止调参过程。         
+开始自动调参前，请确认：
+1. 您已阅读自动调参指南并完成准备工作
+2. 当前控制增益足以在中等扰动下稳定机体
+3. 若出现意外，您能随时通过拨动遥控器摇杆中止调参过程。
 
 点击“确定”开始自动调参。
 </translation>
@@ -17484,6 +17484,11 @@ sudo apt-get 移除调制解调器管理器</translation>
   <context>
     <name>QGCCorePlugin</name>
     <message>
+      <location filename="../src/API/QGCCorePlugin.cc" line="83"/>
+      <source>Water Quality</source>
+      <translation>水质监测</translation>
+    </message>
+    <message>
       <location filename="../src/API/QGCCorePlugin.cc" line="113"/>
       <source>Vibration</source>
       <translation>振动</translation>
@@ -24264,12 +24269,16 @@ If a vehicle still has this key configured, you will no longer be able to commun
       <translation>导入水质监测数据（Excel .xlsx 或 .csv），用折线图或热力图查看各参数随时间的变化。</translation>
     </message>
     <message>
-      <source>📁 Import Excel</source>
-      <translation>📁 导入 Excel</translation>
+      <source>Import Excel</source>
+      <translation>导入 Excel</translation>
     </message>
     <message>
       <source>No data imported yet</source>
       <translation>尚未导入数据</translation>
+    </message>
+    <message>
+      <source>Parameter legend will appear here after a file is imported</source>
+      <translation>导入文件后此处会显示参数图例</translation>
     </message>
     <message>
       <source>%1 records</source>
@@ -24282,6 +24291,10 @@ If a vehicle still has this key configured, you will no longer be able to commun
     <message>
       <source>Heat Map</source>
       <translation>热力图</translation>
+    </message>
+    <message>
+      <source>Normalized</source>
+      <translation>归一化显示</translation>
     </message>
     <message>
       <source>Time range:</source>
@@ -24331,6 +24344,88 @@ If a vehicle still has this key configured, you will no longer be able to commun
       <source> (left axis)</source>
       <translation>（左轴）</translation>
     </message>
+    <message>
+      <source>Conductivity</source>
+      <translation>电导率</translation>
+    </message>
+    <message>
+      <source>Dissolved Oxygen</source>
+      <translation>溶解氧</translation>
+    </message>
+    <message>
+      <source>Ammonium</source>
+      <translation>铵离子</translation>
+    </message>
+    <message>
+      <source>Chlorophyll</source>
+      <translation>叶绿素</translation>
+    </message>
+    <message>
+      <source>Phycocyanin</source>
+      <translation>总藻类-藻蓝蛋白</translation>
+    </message>
+    <message>
+      <source>Turbidity</source>
+      <translation>浊度</translation>
+    </message>
+  </context>
+  <context>
+    <name>WaterQualityIndicatorPage</name>
+    <message>
+      <source>Water Quality</source>
+      <translation>水质参数</translation>
+    </message>
+    <message>
+      <source>Sensor type</source>
+      <translation>传感器类型</translation>
+    </message>
+    <message>
+      <source>Conductivity</source>
+      <translation>电导率</translation>
+    </message>
+    <message>
+      <source>pH</source>
+      <translation>酸碱度</translation>
+    </message>
+    <message>
+      <source>Dissolved Oxygen</source>
+      <translation>溶解氧</translation>
+    </message>
+    <message>
+      <source>Ammonium</source>
+      <translation>铵离子</translation>
+    </message>
+    <message>
+      <source>Chlorophyll</source>
+      <translation>叶绿素</translation>
+    </message>
+    <message>
+      <source>Phycocyanin</source>
+      <translation>总藻类-藻蓝蛋白</translation>
+    </message>
+    <message>
+      <source>Turbidity</source>
+      <translation>浊度</translation>
+    </message>
+    <message>
+      <source>No data</source>
+      <translation>无数据</translation>
+    </message>
+  </context>
+  <context>
+    <name>QualityMapPath</name>
+    <message>
+      <source>Import a file to view the monitoring path</source>
+      <translation>导入文件后显示监测路径</translation>
+    </message>
+    <message>
+      <source>No longitude/latitude columns in this file</source>
+      <translation>该文件没有经纬度列</translation>
+    </message>
+    <message>
+      <source>Not enough positioned samples in this time range</source>
+      <translation>该时间范围内带定位的采样点不足</translation>
+    </message>
   </context>
   <context>
     <name>QualityHeatmap</name>
@@ -24341,6 +24436,14 @@ If a vehicle still has this key configured, you will no longer be able to commun
     <message>
       <source>High</source>
       <translation>高</translation>
+    </message>
+    <message>
+      <source>No data imported yet</source>
+      <translation>尚未导入数据</translation>
+    </message>
+    <message>
+      <source>No parameters selected</source>
+      <translation>没有勾选要显示的参数</translation>
     </message>
   </context>
   <context>

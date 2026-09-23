@@ -47,6 +47,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         VehicleWindFactGroup.h
         VehicleHygrometerFactGroup.cc
         VehicleHygrometerFactGroup.h
+        VehicleWaterQualityFactGroup.cc
+        VehicleWaterQualityFactGroup.h
 )
 
 set(JSON_FILES
@@ -68,6 +70,7 @@ set(JSON_FILES
     TerrainFactGroup.json
     VehicleFact.json
     VibrationFact.json
+    WaterQualityFact.json
     WindFact.json
 )
 qt_add_resources(${CMAKE_PROJECT_NAME} json_vehicle_fact_group

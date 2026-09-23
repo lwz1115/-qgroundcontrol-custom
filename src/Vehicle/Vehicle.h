@@ -50,6 +50,7 @@ class VehicleLocalPositionSetpointFactGroup;
 class VehicleRPMFactGroup;
 class VehicleSetpointFactGroup;
 class VehicleTemperatureFactGroup;
+class VehicleWaterQualityFactGroup;
 class VehicleVibrationFactGroup;
 class VehicleWindFactGroup;
 class Autotune;
@@ -249,6 +250,7 @@ public:
     Q_PROPERTY(FactGroup*           localPosition   READ localPositionFactGroup     CONSTANT)
     Q_PROPERTY(FactGroup*           localPositionSetpoint READ localPositionSetpointFactGroup CONSTANT)
     Q_PROPERTY(FactGroup*           hygrometer      READ hygrometerFactGroup        CONSTANT)
+    Q_PROPERTY(FactGroup*           waterQuality    READ waterQualityFactGroup      CONSTANT)
     Q_PROPERTY(FactGroup*           generator       READ generatorFactGroup         CONSTANT)
     Q_PROPERTY(FactGroup*           efi             READ efiFactGroup               CONSTANT)
     Q_PROPERTY(FactGroup*           radioStatus     READ radioStatusFactGroup       CONSTANT)
@@ -563,6 +565,7 @@ public:
     FactGroup* estimatorStatusFactGroup     ();
     FactGroup* terrainFactGroup             ();
     FactGroup* hygrometerFactGroup          ();
+    FactGroup* waterQualityFactGroup        ();
     FactGroup* generatorFactGroup           ();
     FactGroup* efiFactGroup                 ();
     FactGroup* radioStatusFactGroup         ();
@@ -1091,6 +1094,7 @@ public:
     const QString _estimatorStatusFactGroupName =    QStringLiteral("estimatorStatus");
     const QString _terrainFactGroupName =            QStringLiteral("terrain");
     const QString _hygrometerFactGroupName =         QStringLiteral("hygrometer");
+    const QString _waterQualityFactGroupName =       QStringLiteral("waterQuality");
     const QString _generatorFactGroupName =          QStringLiteral("generator");
     const QString _efiFactGroupName =                QStringLiteral("efi");
     const QString _rpmFactGroupName =                QStringLiteral("rpm");
@@ -1110,6 +1114,7 @@ public:
     VehicleLocalPositionSetpointFactGroup* _localPositionSetpointFactGroup = nullptr;
     VehicleEstimatorStatusFactGroup*    _estimatorStatusFactGroup   = nullptr;
     VehicleHygrometerFactGroup*         _hygrometerFactGroup        = nullptr;
+    VehicleWaterQualityFactGroup*       _waterQualityFactGroup      = nullptr;
     VehicleGeneratorFactGroup*          _generatorFactGroup         = nullptr;
     VehicleEFIFactGroup*                _efiFactGroup               = nullptr;
     VehicleRPMFactGroup*                _rpmFactGroup               = nullptr;

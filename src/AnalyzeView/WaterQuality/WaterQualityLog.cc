@@ -3,9 +3,12 @@
 #include "QGCCompression.h"
 #include "QGCLoggingCategory.h"
 
+#include <algorithm>
+
 #include <QtCore/QDateTime>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QHash>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QStringConverter>
 #include <QtCore/QTextStream>
@@ -52,6 +55,130 @@ QString elementText(QXmlStreamReader& reader)
     return text;
 }
 
+/// 归一化表头：丢掉括号里的单位（(mg/L)、（NTU））、空白与冒号，再转小写。
+/// "溶解氧(mg/L)" -> "溶解氧"、"PH值" -> "ph值"、"TAL-PC" -> "tal-pc"
+QString normalizeHeader(const QString& text)
+{
+    QString normalized;
+    int depth = 0;
+    for (const QChar ch : text) {
+        if ((ch == u'(') || (ch == u'（')) {
+            depth++;
+            continue;
+        }
+        if ((ch == u')') || (ch == u'）')) {
+            depth = qMax(0, depth - 1);
+            continue;
+        }
+        if (depth > 0) {
+            continue;
+        }
+        if (ch.isSpace() || (ch == u':') || (ch == u'：')) {
+            continue;
+        }
+        normalized += ch.toLower();
+    }
+    return normalized;
+}
+
+/// 时间列的表头别名
+const QStringList kTimeAliases = {
+    QStringLiteral("时间"), QStringLiteral("日期"), QStringLiteral("日期时间"),
+    QStringLiteral("采样时间"), QStringLiteral("采集时间"), QStringLiteral("记录时间"), QStringLiteral("监测时间"),
+    QStringLiteral("time"), QStringLiteral("datetime"), QStringLiteral("timestamp"), QStringLiteral("date"),
+};
+/// 经度列的表头别名
+const QStringList kLongitudeAliases = {
+    QStringLiteral("经度"), QStringLiteral("longitude"), QStringLiteral("lon"),
+    QStringLiteral("lng"), QStringLiteral("long"),
+};
+/// 纬度列的表头别名
+const QStringList kLatitudeAliases = {
+    QStringLiteral("纬度"), QStringLiteral("latitude"), QStringLiteral("lat"),
+};
+
+/// 七个水质参数及其表头别名（都是归一化后的精确匹配，避免 "DO"/"EC" 这类短词误命中别的列）
+struct ParameterAlias {
+    const char* canonical;
+    const char* aliases[9];   ///< nullptr 结尾
+};
+
+const ParameterAlias kParameterAliases[] = {
+    { "电导率", { "电导率", "电导", "导电率", "conductivity", "cond", "ec", "spcond", nullptr } },
+    { "pH",     { "ph", "ph值", "酸碱度", nullptr } },
+    { "溶解氧", { "溶解氧", "溶氧", "do", "dissolvedoxygen", "o2", nullptr } },
+    { "铵离子", { "铵离子", "氨氮", "铵氮", "铵", "nh4", "nh4+", "nh4n", "ammonium", nullptr } },
+    { "叶绿素", { "叶绿素", "叶绿素a", "chl", "chla", "chlorophyll", "chlorophylla", nullptr } },
+    { "TAL-PC", { "talpc", "tal-pc", "tal_pc", "藻蓝蛋白", "藻蓝素", "蓝藻", "phycocyanin", "pc", nullptr } },
+    { "浊度",   { "浊度", "turbidity", "turb", "ntu", nullptr } },
+};
+
+bool matchesAny(const QString& normalized, const QStringList& aliases)
+{
+    return aliases.contains(normalized);
+}
+
+/// 归一化后的列名 -> 七个参数里的规范名；不是这七个参数时返回空串
+QString canonicalParameterName(const QString& normalizedHeader)
+{
+    for (const ParameterAlias& entry : kParameterAliases) {
+        for (const char* alias : entry.aliases) {
+            if (!alias) {
+                break;
+            }
+            if (normalizedHeader == QLatin1String(alias)) {
+                return QString::fromUtf8(entry.canonical);
+            }
+        }
+    }
+    return QString();
+}
+
+/// 在前若干行里找表头行：命中「时间 / 经度 / 纬度 / 七个参数」关键字的列数最多的一行。
+/// 模版文件前 3 行是标题文字，表头在第 4 行，所以不能把第 1 行当表头。
+/// 一处关键字都认不出来时返回 -1，由调用方退回旧格式。
+int findHeaderRow(const QList<QStringList>& rows)
+{
+    const int scanLimit = qMin(rows.count(), 30);
+    int bestRow  = -1;
+    int bestHits = 0;
+
+    for (int row = 0; row < scanLimit; row++) {
+        int hits = 0;
+        for (const QString& cell : rows.at(row)) {
+            const QString normalized = normalizeHeader(cell);
+            if (normalized.isEmpty()) {
+                continue;
+            }
+            if (matchesAny(normalized, kTimeAliases) || matchesAny(normalized, kLongitudeAliases) ||
+                matchesAny(normalized, kLatitudeAliases) || !canonicalParameterName(normalized).isEmpty()) {
+                hits++;
+            }
+        }
+        if (hits > bestHits) {
+            bestHits = hits;
+            bestRow  = row;
+        }
+    }
+
+    // 至少命中两列才认成表头：一行里单独一个词恰好同名（比如数据里出现 "EC" 文本）说明不了问题
+    return (bestHits >= 2) ? bestRow : -1;
+}
+
+/// 取第 column 列的文本（越界或 column < 0 时返回空串）
+QString cellAt(const QStringList& cells, int column)
+{
+    return ((column >= 0) && (column < cells.count())) ? cells.at(column).trimmed() : QString();
+}
+
+/// 文本转数值，空串或非数值返回 NaN
+double numberOrNaN(const QString& text)
+{
+    bool ok = false;
+    const double value = text.toDouble(&ok);
+    return ok ? value : qQNaN();
+}
+
 }  // namespace
 
 WaterQualityLog::WaterQualityLog(QObject* parent)
@@ -79,6 +206,9 @@ void WaterQualityLog::_resetData(void)
     _parameterNames.clear();
     _times.clear();
     _values.clear();
+    _longitudes.clear();
+    _latitudes.clear();
+    _hasGeoData = false;
 }
 
 bool WaterQualityLog::loadFile(const QString& filePath)
@@ -111,6 +241,11 @@ bool WaterQualityLog::loadFile(const QString& filePath)
         success = false;
     }
 
+    if (!success) {
+        // 导入失败时清掉旧数据，避免界面残留上一次导入的曲线与参数
+        _resetData();
+        _fileName.clear();
+    }
     _loaded = success;
     if (success) {
         _fileName    = fileInfo.fileName();
@@ -315,43 +450,138 @@ bool WaterQualityLog::_buildFromTable(const QList<QStringList>& rows, const QStr
         return false;
     }
 
-    const QStringList header = rows.first();
-    if (header.count() < 2) {
-        _errorString = tr("The table needs at least two columns: time in the first column, water quality parameters from the second column on");
+    // 表头不一定在第 1 行（模版文件前 3 行是「监测数据 / 无人船 / 任务」标题），
+    // 先按列名关键字定位；一处关键字都认不出来时退回旧格式（第 1 行表头、第 1 列时间）。
+    const int detectedHeaderRow = findHeaderRow(rows);
+    const int headerRow = (detectedHeaderRow >= 0) ? detectedHeaderRow : 0;
+    if (headerRow >= (rows.count() - 1)) {
+        _errorString = tr("The table contains a header row but no data rows");
         return false;
     }
 
-    QVector<double>         times;
-    QVector<QVector<double>> values;
-    values.resize(qMax(0, header.count() - 1));
+    const QStringList& header = rows.at(headerRow);
+
+    int          timeColumn = -1;
+    int          lonColumn  = -1;
+    int          latColumn  = -1;
+    QStringList  parameterNames;
+    QVector<int> parameterColumns;
+
+    if (detectedHeaderRow < 0) {
+        timeColumn = 0;
+        for (int column = 1; column < header.count(); column++) {
+            const QString name = header.at(column).trimmed();
+            parameterNames.append(name.isEmpty() ? tr("Parameter %1").arg(column) : name);
+            parameterColumns.append(column);
+        }
+    } else {
+        QHash<QString, int> parameterColumnByName;
+        QStringList         unmatchedNames;
+        QVector<int>        unmatchedColumns;
+
+        for (int column = 0; column < header.count(); column++) {
+            const QString normalized = normalizeHeader(header.at(column));
+            if (normalized.isEmpty()) {
+                continue;
+            }
+            if (matchesAny(normalized, kTimeAliases)) {
+                if (timeColumn < 0) {
+                    timeColumn = column;
+                }
+                continue;
+            }
+            if (matchesAny(normalized, kLongitudeAliases)) {
+                if (lonColumn < 0) {
+                    lonColumn = column;
+                }
+                continue;
+            }
+            if (matchesAny(normalized, kLatitudeAliases)) {
+                if (latColumn < 0) {
+                    latColumn = column;
+                }
+                continue;
+            }
+
+            const QString canonical = canonicalParameterName(normalized);
+            if (canonical.isEmpty()) {
+                // 七个参数以外的列（温度 / 水深 / COD / 硝氮…）：只有在七个参数一个都没认出来时才会用到
+                unmatchedNames.append(header.at(column).trimmed());
+                unmatchedColumns.append(column);
+            } else if (!parameterColumnByName.contains(canonical)) {
+                // 同名参数列只取第一列
+                parameterColumnByName.insert(canonical, column);
+            }
+        }
+
+        // 固定按七个参数的顺序展示（模版里列序不同，叶绿素排在电导率前面）
+        for (const ParameterAlias& entry : kParameterAliases) {
+            const QString canonical = QString::fromUtf8(entry.canonical);
+            const auto it = parameterColumnByName.constFind(canonical);
+            if (it != parameterColumnByName.constEnd()) {
+                parameterNames.append(canonical);
+                parameterColumns.append(it.value());
+            }
+        }
+        if (parameterNames.isEmpty()) {
+            // 一个已知参数都没有（例如把普通 CSV 当水质表导入）：退回「除时间 / 经纬度外的列都是参数」，
+            // 否则这类文件会一列都识别不出来
+            for (int i = 0; i < unmatchedNames.count(); i++) {
+                parameterNames.append(unmatchedNames.at(i).isEmpty()
+                                      ? tr("Parameter %1").arg(unmatchedColumns.at(i)) : unmatchedNames.at(i));
+                parameterColumns.append(unmatchedColumns.at(i));
+            }
+        }
+        if (timeColumn < 0) {
+            _errorString = tr("The header row has no time column");
+            return false;
+        }
+    }
+
+    QVector<double>          times;
+    QVector<double>          longitudes;
+    QVector<double>          latitudes;
+    QVector<QVector<double>> values(parameterColumns.count());
 
     double firstTimestamp = qQNaN();
+    bool   hasGeoData     = false;
 
-    for (int rowIndex = 1; rowIndex < rows.count(); rowIndex++) {
+    for (int rowIndex = headerRow + 1; rowIndex < rows.count(); rowIndex++) {
         const QStringList& cells = rows.at(rowIndex);
         if (cells.isEmpty()) {
             continue;
         }
 
         double timestamp = 0.0;
-        if (!_parseTimestamp(cells.first(), &timestamp)) {
-            // 时间列解析不出来就跳过这一行（表尾常有汇总行/空行）
+        if (!_parseTimestamp(cellAt(cells, timeColumn), &timestamp)) {
+            // 时间列解析不出来就跳过这一行（表尾常有汇总行 / 空行）
             continue;
         }
         if (qIsNaN(firstTimestamp)) {
             firstTimestamp = timestamp;
         }
-
         times.append(timestamp - firstTimestamp);
-        for (int column = 1; column < header.count(); column++) {
-            const QString text = (column < cells.count()) ? cells.at(column).trimmed() : QString();
-            const double value = text.isEmpty() ? qQNaN() : text.toDouble();
-            values[column - 1].append(text.isEmpty() ? qQNaN() : value);
+
+        double latitude  = numberOrNaN(cellAt(cells, latColumn));
+        double longitude = numberOrNaN(cellAt(cells, lonColumn));
+        if (qIsNaN(latitude) || qIsNaN(longitude) ||
+            (latitude < -90.0) || (latitude > 90.0) || (longitude < -180.0) || (longitude > 180.0)) {
+            // 无效坐标统一记 NaN：地图路径要把这些点跳过去，而不是画到 (0, 0) 上
+            latitude  = qQNaN();
+            longitude = qQNaN();
+        } else {
+            hasGeoData = true;
+        }
+        latitudes.append(latitude);
+        longitudes.append(longitude);
+
+        for (int i = 0; i < parameterColumns.count(); i++) {
+            values[i].append(numberOrNaN(cellAt(cells, parameterColumns.at(i))));
         }
     }
 
     if (times.isEmpty()) {
-        _errorString = tr("No valid timestamps found in the first column");
+        _errorString = tr("No valid timestamps found in the time column");
         return false;
     }
     // 时间必须递增，图表轴才正常
@@ -362,15 +592,12 @@ bool WaterQualityLog::_buildFromTable(const QList<QStringList>& rows, const QStr
     }
 
     _resetData();
-    for (int column = 1; column < header.count(); column++) {
-        QString name = header.at(column).trimmed();
-        if (name.isEmpty()) {
-            name = tr("Parameter %1").arg(column);
-        }
-        _parameterNames.append(name);
-    }
-    _times  = times;
-    _values = values;
+    _parameterNames = parameterNames;
+    _times          = times;
+    _values         = values;
+    _longitudes     = longitudes;
+    _latitudes      = latitudes;
+    _hasGeoData     = hasGeoData;
 
     return true;
 }
@@ -547,48 +774,116 @@ QVariantMap WaterQualityLog::parameterMinMax(const QString& parameterName) const
     return result;
 }
 
-QVariantList WaterQualityLog::heatmapGrid(double minTime, double maxTime, int columnCount)
+QVariantMap WaterQualityLog::sampleAt(const QString& parameterName, double time) const
 {
-    QVariantList grid;
-    if ((columnCount <= 0) || _times.isEmpty() || _values.isEmpty()) {
-        return grid;
+    QVariantMap result;
+    const int column = _columnForParameter(parameterName);
+    if ((column < 0) || _times.isEmpty()) {
+        return result;
     }
 
-    const double span = qMax(1e-9, maxTime - minTime);
-    const int rowCount = _values.count();
+    // _times 非递减，二分找到第一个不小于 time 的记录，再和它前一条比谁更近
+    const auto begin = _times.cbegin();
+    const auto end   = _times.cend();
+    auto it = std::lower_bound(begin, end, time);
+    if (it == end) {
+        --it;
+    } else if ((it != begin) && ((time - *(it - 1)) <= (*it - time))) {
+        --it;
+    }
 
-    QVector<QVector<double>> sum(rowCount, QVector<double>(columnCount, 0.0));
-    QVector<QVector<int>>    hits(rowCount, QVector<int>(columnCount, 0));
+    const int index = static_cast<int>(it - begin);
+    const double value = _values.at(column).at(index);
+    if (qIsNaN(value)) {
+        return result;
+    }
 
+    result.insert(QStringLiteral("x"), _times.at(index));
+    result.insert(QStringLiteral("y"), value);
+    return result;
+}
+
+QVariantList WaterQualityLog::geoPathForParameter(const QString& parameterName,
+                                                 double minTime, double maxTime, int maxPoints) const
+{
+    QVariantList path;
+    if (!_hasGeoData || _times.isEmpty()) {
+        return path;
+    }
+
+    const int column = _columnForParameter(parameterName);
+    const QVector<double>* columnValues = (column >= 0) ? &_values.at(column) : nullptr;
+
+    // 先取出区间内坐标有效的点（没经纬度的记录不能画到路径上）
+    QVector<int> indices;
     for (int i = 0; i < _times.count(); i++) {
         const double t = _times.at(i);
-        if ((t < minTime) || (t > maxTime)) {
+        if (t < minTime) {
             continue;
         }
-        int column = static_cast<int>(((t - minTime) / span) * columnCount);
-        column = qBound(0, column, columnCount - 1);
-        for (int row = 0; row < rowCount; row++) {
-            const double value = _values.at(row).at(i);
-            if (qIsNaN(value)) {
+        if (t > maxTime) {
+            break;
+        }
+        if (qIsNaN(_latitudes.at(i)) || qIsNaN(_longitudes.at(i))) {
+            continue;
+        }
+        indices.append(i);
+    }
+    if (indices.isEmpty()) {
+        return path;
+    }
+
+    const auto appendPoint = [&path](double latitude, double longitude, double time, double value) {
+        QVariantMap point;
+        point.insert(QStringLiteral("latitude"), latitude);
+        point.insert(QStringLiteral("longitude"), longitude);
+        point.insert(QStringLiteral("time"), time);
+        point.insert(QStringLiteral("value"), value);
+        path.append(point);
+    };
+
+    // 按时间分桶取平均：地图上每一段折线都要单独建一个 MapPolyline，段数直接决定渲染开销
+    if ((maxPoints > 0) && (indices.count() > maxPoints)) {
+        const int bucketCount = qMax(1, maxPoints);
+        const double span = qMax(1e-9, maxTime - minTime);
+        QVector<double> sumLat(bucketCount, 0.0);
+        QVector<double> sumLon(bucketCount, 0.0);
+        QVector<double> sumTime(bucketCount, 0.0);
+        QVector<double> sumValue(bucketCount, 0.0);
+        QVector<int>    hits(bucketCount, 0);
+        QVector<int>    valueHits(bucketCount, 0);
+
+        for (const int index : indices) {
+            int bucket = static_cast<int>(((_times.at(index) - minTime) / span) * bucketCount);
+            bucket = qBound(0, bucket, bucketCount - 1);
+            sumLat[bucket]  += _latitudes.at(index);
+            sumLon[bucket]  += _longitudes.at(index);
+            sumTime[bucket] += _times.at(index);
+            hits[bucket]++;
+            if (columnValues) {
+                const double value = columnValues->at(index);
+                if (!qIsNaN(value)) {
+                    sumValue[bucket] += value;
+                    valueHits[bucket]++;
+                }
+            }
+        }
+
+        for (int bucket = 0; bucket < bucketCount; bucket++) {
+            if (hits.at(bucket) == 0) {
                 continue;
             }
-            sum[row][column]  += value;
-            hits[row][column] += 1;
+            const double value = (valueHits.at(bucket) > 0) ? (sumValue.at(bucket) / valueHits.at(bucket)) : qQNaN();
+            appendPoint(sumLat.at(bucket) / hits.at(bucket), sumLon.at(bucket) / hits.at(bucket),
+                        sumTime.at(bucket) / hits.at(bucket), value);
         }
+        return path;
     }
 
-    for (int row = 0; row < rowCount; row++) {
-        QVariantList rowValues;
-        rowValues.reserve(columnCount);
-        for (int column = 0; column < columnCount; column++) {
-            if (hits.at(row).at(column) == 0) {
-                rowValues.append(qQNaN());
-            } else {
-                rowValues.append(sum.at(row).at(column) / hits.at(row).at(column));
-            }
-        }
-        grid.append(rowValues);
+    path.reserve(indices.count());
+    for (const int index : indices) {
+        const double value = columnValues ? columnValues->at(index) : qQNaN();
+        appendPoint(_latitudes.at(index), _longitudes.at(index), _times.at(index), value);
     }
-
-    return grid;
+    return path;
 }

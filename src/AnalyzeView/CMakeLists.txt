@@ -33,7 +33,8 @@ qt_add_qml_module(AnalyzeViewModule
         Vibration/VibrationPage.qml
         WaterQuality/WaterQualityPage.qml
         WaterQuality/QualityLineChart.qml
-        WaterQuality/QualityHeatmap.qml
+        WaterQuality/QualityMapPath.qml
+        WaterQuality/WaterQualityUtils.js
     NO_PLUGIN
 )
 

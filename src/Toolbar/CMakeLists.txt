@@ -34,6 +34,8 @@ qt_add_qml_module(ToolbarModule
         TelemetryRSSIIndicator.qml
         VehicleGPSIndicator.qml
         VehicleMessageList.qml
+        WaterQualityIndicator.qml
+        WaterQualityIndicatorPage.qml
     NO_PLUGIN
 )
 

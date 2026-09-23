@@ -1,0 +1,77 @@
+{
+    "version":      1,
+    "fileType":  "FactMetaData",
+    "QGC.MetaData.Facts":
+[
+{
+    "name":             "conductivity",
+    "shortDesc":        "Conductivity",
+    "type":             "double",
+    "units":            "mS/cm",
+    "decimalPlaces":    2,
+    "min":              0,
+    "max":              200,
+    "default":          0
+},
+{
+    "name":             "ph",
+    "shortDesc":        "pH",
+    "type":             "double",
+    "units":            "",
+    "decimalPlaces":    2,
+    "min":              0,
+    "max":              14,
+    "default":          0
+},
+{
+    "name":             "dissolvedOxygen",
+    "shortDesc":        "Dissolved oxygen",
+    "type":             "double",
+    "units":            "mg/L",
+    "decimalPlaces":    2,
+    "min":              0,
+    "max":              50,
+    "default":          0
+},
+{
+    "name":             "ammonium",
+    "shortDesc":        "Ammonium ion",
+    "type":             "double",
+    "units":            "mg/L",
+    "decimalPlaces":    3,
+    "min":              0,
+    "max":              100,
+    "default":          0
+},
+{
+    "name":             "chlorophyll",
+    "shortDesc":        "Chlorophyll",
+    "type":             "double",
+    "units":            "μg/L",
+    "decimalPlaces":    2,
+    "min":              0,
+    "max":              500,
+    "default":          0
+},
+{
+    "name":             "phycocyanin",
+    "shortDesc":        "Total algae phycocyanin",
+    "type":             "double",
+    "units":            "cells/mL",
+    "decimalPlaces":    2,
+    "min":              0,
+    "max":              100000,
+    "default":          0
+},
+{
+    "name":             "turbidity",
+    "shortDesc":        "Turbidity",
+    "type":             "double",
+    "units":            "NTU",
+    "decimalPlaces":    2,
+    "min":              0,
+    "max":              4000,
+    "default":          0
+}
+]
+}
