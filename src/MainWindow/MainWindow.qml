@@ -710,7 +710,7 @@ ApplicationWindow {
         rightInset:     0
         topInset:       0
         bottomInset:    0
-        padding:        _margins * 2
+        padding:        _margins                // 浮层内边距：露出浮层底色（浅色主题下为白），使黑底面板四周仍有一圈白
         visible:        false
         modal:          true
         focus:          true
@@ -748,6 +748,9 @@ ApplicationWindow {
                 color:          QGroundControl.globalPalette.window
                 radius:         indicatorDrawer._margins
                 opacity:        0.85
+                // 细白框：1/devicePixelRatio = 1 物理像素的发丝线，这里取 5 倍
+                border.color:   Qt.rgba(1, 1, 1, 0.55)
+                border.width:   5 / Screen.devicePixelRatio
             }
 
             Rectangle {

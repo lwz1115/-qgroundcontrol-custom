@@ -414,7 +414,8 @@ Item {
                     vehicle: object
                     coordinate: object.coordinate
                     map: editorMap
-                    size: ScreenTools.defaultFontPixelHeight * 3
+                    // 同上：boat.png 竖长，实际高度约为 size 的 1.6 倍，因子取 2 避免盖住航线
+                    size: ScreenTools.defaultFontPixelHeight * 2
                     z: QGroundControl.zOrderMapItems - 1
                 }
             }

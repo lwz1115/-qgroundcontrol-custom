@@ -221,7 +221,9 @@ FlightMap {
             vehicle:        object
             coordinate:     object.coordinate
             map:            _root
-            size:           pipMode ? ScreenTools.defaultFontPixelHeight : ScreenTools.defaultFontPixelHeight * 3
+            // size 是图标宽度，而 boat.png 是 123x193 的竖长图，实际高度约为宽度的 1.6 倍；
+            // 因子取 2 以免图标盖住航点航线（pipMode 下用更小的尺寸）
+            size:           pipMode ? ScreenTools.defaultFontPixelHeight : ScreenTools.defaultFontPixelHeight * 2
             z:              QGroundControl.zOrderVehicles
         }
     }
