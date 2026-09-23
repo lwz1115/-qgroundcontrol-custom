@@ -24265,8 +24265,20 @@ If a vehicle still has this key configured, you will no longer be able to commun
   <context>
     <name>WaterQualityPage</name>
     <message>
-      <source>Import water quality monitoring data (Excel .xlsx or .csv) and view each parameter over time as a line chart or a heat map.</source>
-      <translation>导入水质监测数据（Excel .xlsx 或 .csv），用折线图或热力图查看各参数随时间的变化。</translation>
+      <source>Import water quality monitoring data (Excel .xlsx or .csv) and view one parameter at a time as a line chart, or as a colored monitoring path on the map.</source>
+      <translation>导入水质监测数据（Excel .xlsx 或 .csv），一次查看一个参数：折线图，或地图上的彩色监测路径。</translation>
+    </message>
+    <message>
+      <source>Map Heat Path</source>
+      <translation>地图热力路径</translation>
+    </message>
+    <message>
+      <source>Parameter:</source>
+      <translation>参数：</translation>
+    </message>
+    <message>
+      <source>pH</source>
+      <translation>酸碱度</translation>
     </message>
     <message>
       <source>Import Excel</source>
@@ -24503,6 +24515,18 @@ If a vehicle still has this key configured, you will no longer be able to commun
     <message>
       <source>Parameter %1</source>
       <translation>参数 %1</translation>
+    </message>
+    <message>
+      <source>No valid timestamps found in the time column</source>
+      <translation>时间列里没有解析出有效的时间</translation>
+    </message>
+    <message>
+      <source>The header row has no time column</source>
+      <translation>表头行里没有时间列</translation>
+    </message>
+    <message>
+      <source>The table contains a header row but no data rows</source>
+      <translation>表里只有表头行，没有数据行</translation>
     </message>
   </context>
 </TS>
