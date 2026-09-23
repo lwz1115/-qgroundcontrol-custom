@@ -25,6 +25,9 @@ constexpr double kExcelEpochOffsetDays = 25569.0;
 constexpr double kExcelSerialMin = 20000.0;
 constexpr double kExcelSerialMax = 80000.0;
 
+/// 悬停取值时从最近记录向两侧最多找多少个样本（跳过被极值剔除 / 缺测的点）
+constexpr int kHoverSearchRadius = 512;
+
 /// 单元格引用（如 "AB12"）里的列号转 0 基下标；非法时返回 -1
 int columnFromCellRef(const QString& cellRef)
 {
@@ -206,9 +209,104 @@ void WaterQualityLog::_resetData(void)
     _parameterNames.clear();
     _times.clear();
     _values.clear();
+    _visible.clear();
     _longitudes.clear();
     _latitudes.clear();
     _hasGeoData = false;
+}
+
+int WaterQualityLog::excludedSampleCount(void) const
+{
+    int excluded = 0;
+    for (const QVector<bool>& columnVisible : _visible) {
+        for (const bool visible : columnVisible) {
+            if (!visible) {
+                excluded++;
+            }
+        }
+    }
+    return excluded;
+}
+
+void WaterQualityLog::setFilterExtremes(bool enabled)
+{
+    if (_filterExtremes == enabled) {
+        return;
+    }
+    _filterExtremes = enabled;
+    _applyExtremeFilter();
+
+    emit filterExtremesChanged();
+    emit dataChanged();
+}
+
+void WaterQualityLog::setExtremeFilterCount(int count)
+{
+    const int boundedCount = qBound(1, count, 1000);
+    if (_extremeFilterCount == boundedCount) {
+        return;
+    }
+    _extremeFilterCount = boundedCount;
+    _applyExtremeFilter();
+
+    emit extremeFilterCountChanged();
+    emit dataChanged();
+}
+
+void WaterQualityLog::_applyExtremeFilter(void)
+{
+    _visible.clear();
+
+    for (const QVector<double>& columnValues : _values) {
+        QVector<bool> columnVisible(columnValues.count(), true);
+
+        if (_filterExtremes) {
+            // 极值剔除按“数值排序”挑，而不是按时间：传感器的跳变毛刺通常就是整列的最大 / 最小值
+            QVector<int> ranked;
+            ranked.reserve(columnValues.count());
+            for (int i = 0; i < columnValues.count(); i++) {
+                if (!qIsNaN(columnValues.at(i))) {
+                    ranked.append(i);
+                }
+            }
+            std::sort(ranked.begin(), ranked.end(), [&columnValues](int lhs, int rhs) {
+                return columnValues.at(lhs) < columnValues.at(rhs);
+            });
+
+            // 至少留一个点：极端情况下不能把整列剔空
+            const int dropCount = qMin(_extremeFilterCount, qMax(0, (ranked.count() - 1) / 2));
+            for (int i = 0; i < dropCount; i++) {
+                columnVisible[ranked.at(i)]                        = false;
+                columnVisible[ranked.at(ranked.count() - 1 - i)]   = false;
+            }
+        }
+
+        _visible.append(columnVisible);
+    }
+}
+
+bool WaterQualityLog::_isSampleVisible(int column, int index) const
+{
+    if ((column < 0) || (column >= _visible.count())) {
+        return true;
+    }
+    const QVector<bool>& columnVisible = _visible.at(column);
+    if ((index < 0) || (index >= columnVisible.count())) {
+        return true;
+    }
+    return columnVisible.at(index);
+}
+
+bool WaterQualityLog::_isValueUsable(int column, int index) const
+{
+    if ((column < 0) || (index < 0) || (column >= _values.count())) {
+        return false;
+    }
+    const QVector<double>& columnValues = _values.at(column);
+    if (index >= columnValues.count()) {
+        return false;
+    }
+    return !qIsNaN(columnValues.at(index)) && _isSampleVisible(column, index);
 }
 
 bool WaterQualityLog::loadFile(const QString& filePath)
@@ -599,6 +697,9 @@ bool WaterQualityLog::_buildFromTable(const QList<QStringList>& rows, const QStr
     _latitudes      = latitudes;
     _hasGeoData     = hasGeoData;
 
+    // 导入即按当前开关剔除极值，界面无需再关心这一步
+    _applyExtremeFilter();
+
     return true;
 }
 
@@ -680,7 +781,7 @@ QVariantList WaterQualityLog::samplesForParameter(const QString& parameterName,
 
     const QVector<double>& columnValues = _values.at(column);
 
-    // 先取出区间内的点
+    // 先取出区间内的点（被极值剔除的点不参与显示）
     QVector<int> indices;
     for (int i = 0; i < _times.count(); i++) {
         const double t = _times.at(i);
@@ -690,7 +791,7 @@ QVariantList WaterQualityLog::samplesForParameter(const QString& parameterName,
         if (t > maxTime) {
             break;
         }
-        if (!qIsNaN(columnValues.at(i))) {
+        if (_isValueUsable(column, i)) {
             indices.append(i);
         }
     }
@@ -750,10 +851,11 @@ QVariantMap WaterQualityLog::parameterMinMax(const QString& parameterName) const
 
     double minValue = qQNaN();
     double maxValue = qQNaN();
-    for (const double value : _values.at(column)) {
-        if (qIsNaN(value)) {
+    for (int i = 0; i < _values.at(column).count(); i++) {
+        if (!_isValueUsable(column, i)) {
             continue;
         }
+        const double value = _values.at(column).at(i);
         if (qIsNaN(minValue) || (value < minValue)) {
             minValue = value;
         }
@@ -792,14 +894,32 @@ QVariantMap WaterQualityLog::sampleAt(const QString& parameterName, double time)
         --it;
     }
 
-    const int index = static_cast<int>(it - begin);
-    const double value = _values.at(column).at(index);
-    if (qIsNaN(value)) {
+    const int nearest = static_cast<int>(it - begin);
+
+    // 被极值剔除或本就缺测的点不能作为悬停取值，从最近记录向两侧扩着找
+    const int lastIndex = _times.count() - 1;
+    int index = -1;
+    for (int offset = 0; (offset <= kHoverSearchRadius) && (index < 0); offset++) {
+        const int before      = nearest - offset;
+        const int after       = nearest + offset;
+        const bool beforeOk   = (before >= 0) && _isValueUsable(column, before);
+        const bool afterOk    = (after <= lastIndex) && _isValueUsable(column, after);
+
+        if (beforeOk && afterOk) {
+            index = ((time - _times.at(before)) <= (_times.at(after) - time)) ? before : after;
+        } else if (beforeOk) {
+            index = before;
+        } else if (afterOk) {
+            index = after;
+        }
+    }
+
+    if (index < 0) {
         return result;
     }
 
     result.insert(QStringLiteral("x"), _times.at(index));
-    result.insert(QStringLiteral("y"), value);
+    result.insert(QStringLiteral("y"), _values.at(column).at(index));
     return result;
 }
 
@@ -861,8 +981,9 @@ QVariantList WaterQualityLog::geoPathForParameter(const QString& parameterName,
             sumTime[bucket] += _times.at(index);
             hits[bucket]++;
             if (columnValues) {
+                // 被极值剔除的点不参与该段的均值，否则热力色带会把毛刺又摊回去
                 const double value = columnValues->at(index);
-                if (!qIsNaN(value)) {
+                if (!qIsNaN(value) && _isSampleVisible(column, index)) {
                     sumValue[bucket] += value;
                     valueHits[bucket]++;
                 }
@@ -882,7 +1003,7 @@ QVariantList WaterQualityLog::geoPathForParameter(const QString& parameterName,
 
     path.reserve(indices.count());
     for (const int index : indices) {
-        const double value = columnValues ? columnValues->at(index) : qQNaN();
+        const double value = (columnValues && _isSampleVisible(column, index)) ? columnValues->at(index) : qQNaN();
         appendPoint(_latitudes.at(index), _longitudes.at(index), _times.at(index), value);
     }
     return path;

@@ -47,6 +47,13 @@ class WaterQualityLog : public QObject
     /// 表里是否带经纬度（没有经纬度就画不出地图路径）
     Q_PROPERTY(bool hasGeoData READ hasGeoData NOTIFY dataChanged)
 
+    /// 是否剔除每个水质参数的极大值 / 极小值（默认开启，导入完成后自动生效）
+    Q_PROPERTY(bool filterExtremes READ filterExtremes WRITE setFilterExtremes NOTIFY filterExtremesChanged)
+    /// 每个参数在最大值端和最小值端各剔除多少个样本（默认 1）
+    Q_PROPERTY(int extremeFilterCount READ extremeFilterCount WRITE setExtremeFilterCount NOTIFY extremeFilterCountChanged)
+    /// 被剔除的样本点总数（所有参数列合计），供界面提示
+    Q_PROPERTY(int excludedSampleCount READ excludedSampleCount NOTIFY dataChanged)
+
 public:
     explicit WaterQualityLog(QObject* parent = nullptr);
     ~WaterQualityLog() override;
@@ -59,6 +66,14 @@ public:
     double      minTime     () const { return _times.isEmpty() ? 0.0 : _times.first(); }
     double      maxTime     () const { return _times.isEmpty() ? 1.0 : _times.last(); }
     bool        hasGeoData  () const { return _hasGeoData; }
+    bool        filterExtremes() const { return _filterExtremes; }
+    int         extremeFilterCount() const { return _extremeFilterCount; }
+    int         excludedSampleCount() const;
+
+    /// 极值剔除开关。切换后会重算参与显示的样本并发出 dataChanged。
+    void setFilterExtremes(bool enabled);
+    /// 每个参数两端各剔除的样本数（小于 1 按 1 处理）
+    void setExtremeFilterCount(int count);
 
     /// 导入文件（按扩展名分派）。成功返回 true，失败时 errorString 有描述。
     Q_INVOKABLE bool loadFile(const QString& filePath);
@@ -95,6 +110,10 @@ signals:
     void fileNameChanged();
     /// 参数名 / 采样点 / 时间范围 / 经纬度发生变化
     void dataChanged();
+    /// 极值剔除开关发生变化
+    void filterExtremesChanged();
+    /// 极值剔除数量发生变化
+    void extremeFilterCountChanged();
 
 private:
     bool _loadCsv (const QString& filePath);
@@ -111,12 +130,24 @@ private:
 
     void _resetData(void);
 
+    /// 按当前开关重算 _visible：每个参数列在最大值端和最小值端各剔除 _extremeFilterCount 个样本
+    void _applyExtremeFilter(void);
+
+    /// 该样本点是否参与显示（未被极值剔除）
+    bool _isSampleVisible(int column, int index) const;
+
+    /// 该样本点是否既参与显示又有有效数值（图表 / 统计都按这个口径）
+    bool _isValueUsable(int column, int index) const;
+
     QStringList             _parameterNames;    ///< 参数名（下标与 _values 一一对应）
     QVector<double>         _times;             ///< 每条记录的时间（秒，相对第一条）
     QVector<QVector<double>> _values;           ///< _values[参数下标][记录下标]，无数据用 NaN
+    QVector<QVector<bool>>  _visible;           ///< _visible[参数下标][记录下标]，false 表示被极值剔除
     QVector<double>         _longitudes;        ///< 每条记录的经度，缺失用 NaN
     QVector<double>         _latitudes;         ///< 每条记录的纬度，缺失用 NaN
     bool                    _hasGeoData = false;
+    bool                    _filterExtremes     = true; ///< 默认开启极值剔除
+    int                     _extremeFilterCount = 1;    ///< 每个参数两端各剔除的样本数
 
     QString _fileName;
     QString _errorString;

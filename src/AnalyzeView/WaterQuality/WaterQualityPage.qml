@@ -453,6 +453,22 @@ AnalyzePage {
                     }
                 }
 
+                QGCCheckBox {
+                    text:    qsTr("Remove min/max")
+                    // 导入时 C++ 侧已经按这个开关算过了，这里只是让用户可以关掉 / 打开
+                    visible: waterLog.loaded
+                    checked: waterLog.filterExtremes
+                    onToggled: {
+                        waterLog.filterExtremes = checked
+                        refreshCharts()
+                    }
+                }
+
+                QGCLabel {
+                    text:    qsTr("%1 removed").arg(waterLog.excludedSampleCount)
+                    visible: waterLog.loaded && (waterLog.excludedSampleCount > 0)
+                }
+
                 Item { Layout.fillWidth: true }
             }
 

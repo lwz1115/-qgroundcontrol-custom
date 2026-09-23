@@ -27,15 +27,23 @@ Item {
         id:                     _toolInsets
         leftEdgeTopInset:       parentToolInsets.leftEdgeTopInset
         leftEdgeCenterInset:    parentToolInsets.leftEdgeCenterInset
-        leftEdgeBottomInset:    parentToolInsets.leftEdgeBottomInset
+        // 左下角让出水质折线图入口图标的位置
+        leftEdgeBottomInset:    parentToolInsets.leftEdgeBottomInset + waterQualityOverlay.reservedWidth
         rightEdgeTopInset:      parentToolInsets.rightEdgeTopInset
         rightEdgeCenterInset:   parentToolInsets.rightEdgeCenterInset
         rightEdgeBottomInset:   parentToolInsets.rightEdgeBottomInset
         topEdgeLeftInset:       parentToolInsets.topEdgeLeftInset
         topEdgeCenterInset:     parentToolInsets.topEdgeCenterInset
         topEdgeRightInset:      parentToolInsets.topEdgeRightInset
-        bottomEdgeLeftInset:    parentToolInsets.bottomEdgeLeftInset
+        bottomEdgeLeftInset:    parentToolInsets.bottomEdgeLeftInset + waterQualityOverlay.reservedHeight
         bottomEdgeCenterInset:  parentToolInsets.bottomEdgeCenterInset
         bottomEdgeRightInset:   parentToolInsets.bottomEdgeRightInset
+    }
+
+    // 无人船水质监测：左下角水滴图标 + 实时折线图
+    WaterQualityOverlay {
+        id:                 waterQualityOverlay
+        anchors.fill:       parent
+        parentToolInsets:   _root.parentToolInsets
     }
 }

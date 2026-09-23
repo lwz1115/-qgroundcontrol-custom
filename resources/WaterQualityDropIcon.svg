@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 水质实时折线图入口图标：单色实心水滴，靠 QGCColoredImage 按 alpha 蒙版染色 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="#ffffff" d="M12 2C12 2 5 10.2 5 14.6A7 7 0 0 0 19 14.6C19 10.2 12 2 12 2Z"/>
+</svg>

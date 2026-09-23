@@ -76,6 +76,8 @@ qt_add_qml_module(FlyViewModule
         VehicleWarnings.qml
         VirtualJoystick.qml
         VTOLChecklist.qml
+        WaterQualityLiveChart.qml
+        WaterQualityOverlay.qml
     NO_PLUGIN
 )
 
@@ -94,4 +96,5 @@ qt_add_resources(FlyViewModule flyview_qmlimages
     BASE "${CMAKE_SOURCE_DIR}/resources"
     FILES
         "${CMAKE_SOURCE_DIR}/resources/check.svg"
+        "${CMAKE_SOURCE_DIR}/resources/WaterQualityDropIcon.svg"
 )

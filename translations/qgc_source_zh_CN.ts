@@ -24380,6 +24380,14 @@ If a vehicle still has this key configured, you will no longer be able to commun
       <source>Turbidity</source>
       <translation>浊度</translation>
     </message>
+    <message>
+      <source>Remove min/max</source>
+      <translation>剔除极值</translation>
+    </message>
+    <message>
+      <source>%1 removed</source>
+      <translation>已剔除 %1 个点</translation>
+    </message>
   </context>
   <context>
     <name>WaterQualityIndicatorPage</name>
@@ -24459,6 +24467,13 @@ If a vehicle still has this key configured, you will no longer be able to commun
     </message>
   </context>
   <context>
+    <name>WaterQualityLiveChart</name>
+    <message>
+      <source>Waiting for telemetry</source>
+      <translation>等待遥测数据</translation>
+    </message>
+  </context>
+  <context>
     <name>WaterQualityLog</name>
     <message>
       <source>No file selected</source>
@@ -24527,6 +24542,57 @@ If a vehicle still has this key configured, you will no longer be able to commun
     <message>
       <source>The table contains a header row but no data rows</source>
       <translation>表里只有表头行，没有数据行</translation>
+    </message>
+  </context>
+  <context>
+    <name>WaterQualityOverlay</name>
+    <message>
+      <source>Water Quality Trend</source>
+      <translation>水质实时曲线</translation>
+    </message>
+    <message>
+      <source>All parameters</source>
+      <translation>全部参数</translation>
+    </message>
+    <message>
+      <source>Conductivity</source>
+      <translation>电导率</translation>
+    </message>
+    <message>
+      <source>pH</source>
+      <translation>酸碱度</translation>
+    </message>
+    <message>
+      <source>Dissolved Oxygen</source>
+      <translation>溶解氧</translation>
+    </message>
+    <message>
+      <source>Ammonium</source>
+      <translation>铵离子</translation>
+    </message>
+    <message>
+      <source>Chlorophyll</source>
+      <translation>叶绿素</translation>
+    </message>
+    <message>
+      <source>Phycocyanin</source>
+      <translation>总藻类-藻蓝蛋白</translation>
+    </message>
+    <message>
+      <source>Turbidity</source>
+      <translation>浊度</translation>
+    </message>
+    <message>
+      <source>Each parameter is scaled to its own range</source>
+      <translation>各参数按各自量程归一化显示</translation>
+    </message>
+    <message>
+      <source>Remove min/max</source>
+      <translation>剔除极值</translation>
+    </message>
+    <message>
+      <source>Clear</source>
+      <translation>清空</translation>
     </message>
   </context>
 </TS>
