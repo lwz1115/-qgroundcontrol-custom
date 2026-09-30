@@ -227,6 +227,25 @@ public:
     Q_PROPERTY(bool     haveMRSpeedLimits       READ haveMRSpeedLimits                              NOTIFY haveMRSpeedLimChanged)
     Q_PROPERTY(bool     haveFWSpeedLimits       READ haveFWSpeedLimits                              NOTIFY haveFWSpeedLimChanged)
 
+    // 水质采样机构（AP_WaterSampler / AP_WaterPump / AP_WaterValve）。
+    // 取值来自飞控 WS_* 参数组；固件未启用该组时回落到文档给出的默认值。
+    Q_PROPERTY(int     waterMaxVolume         READ waterMaxVolume          NOTIFY waterSamplingParamsChanged) ///< WS_MAX_VOLUME 船体最大容量（毫升）
+    Q_PROPERTY(double  waterFlowRate          READ waterFlowRate           NOTIFY waterSamplingParamsChanged) ///< WS_FLOW_RATE 泵流速（毫升/秒）
+    Q_PROPERTY(double  waterOpenTime          READ waterOpenTime           NOTIFY waterSamplingParamsChanged) ///< WS_OPEN_TIME 放下采样杆时间（秒）
+    Q_PROPERTY(double  waterCloseDelay        READ waterCloseDelay         NOTIFY waterSamplingParamsChanged) ///< WS_CLOSE_DELAY 关泵后延时（秒）
+    Q_PROPERTY(double  waterCloseTime         READ waterCloseTime          NOTIFY waterSamplingParamsChanged) ///< WS_CLOSE_TIME 收回采样杆时间（秒）
+    Q_PROPERTY(int     waterTriggerChannel    READ waterTriggerChannel     NOTIFY waterSamplingParamsChanged) ///< WS_TRIG_CHAN 采样触发通道
+    Q_PROPERTY(int     waterBottleChannel     READ waterBottleChannel      NOTIFY waterSamplingParamsChanged) ///< WS_BOTTLE_CHAN 瓶号通道
+    Q_PROPERTY(int     waterVolumeChannel     READ waterVolumeChannel      NOTIFY waterSamplingParamsChanged) ///< WS_VOLUME_CHAN 容量通道
+    // 版本探测用“完整流程”参数，而不是 WS_ENABLE：WS_ENABLE 从第一版采样杆固件起就存在，
+    // 拿它当支持标志会把 v5 误判为支持（v5 听的是通道 10，QGC 却往 14/15/16 写 → 全部无效）。
+    Q_PROPERTY(bool    waterSamplingSupported READ waterSamplingSupported  NOTIFY waterSamplingParamsChanged) ///< WS_BOTTLE_CHAN 与 WS_VOLUME_CHAN 同时存在（v7 完整流程）
+    Q_PROPERTY(bool    waterSamplingEnabled   READ waterSamplingEnabled    NOTIFY waterSamplingParamsChanged) ///< WS_ENABLE == 1（总开关，标志参数始终可读）
+    Q_PROPERTY(bool    waterValveEnabled      READ waterValveEnabled       NOTIFY waterSamplingParamsChanged) ///< WS_VALVE_ENABLE == 1（为 0 时电磁阀强制释放，两瓶会进同一个瓶）
+    Q_PROPERTY(bool    waterSamplingBusy      READ waterSamplingBusy       NOTIFY waterSamplingBusyChanged)   ///< 命令序列发送中
+    Q_PROPERTY(int     waterSamplingStage     READ waterSamplingStage      NOTIFY waterSamplingStageChanged)  ///< 飞控回报的流程阶段（见 WaterSamplingStage）
+    Q_PROPERTY(int     waterPumpSeconds       READ waterPumpSeconds        NOTIFY waterPumpSecondsChanged)    ///< 固件回报的抽水秒数（“WS: pumping %us”）
+
     Q_PROPERTY(ParameterManager*        parameterManager    READ parameterManager   CONSTANT)
     Q_PROPERTY(VehicleLinkManager*      vehicleLinkManager  READ vehicleLinkManager CONSTANT)
     Q_PROPERTY(VehicleObjectAvoidance*  objectAvoidance     READ objectAvoidance    CONSTANT)
@@ -754,6 +773,39 @@ public slots:
     void _offlineVehicleTypeSettingChanged  (QVariant varVehicleType);  // Should only be used by MissionController to set vehicle type from Plan file
     Q_INVOKABLE void sendGripperAction(GRIPPER_ACTIONS gripperOption);
 
+    /// 水质采样杆：按下 / 松开分别发一条 MAV_CMD_DO_SET_SERVO（183）。
+    /// 飞控侧只在触发通道的值由 <=1500 变为 >1500 时启动一次采样序列
+    /// （伸出 → 保持 10 秒 → 收回），时序完全由飞控负责，QGC 不做任何延时。
+    /// 松开时必须补发中位值，否则触发器卡在高位，后续按键全部失效。
+    ///     @param servoChannel 1 基的 SERVO 通道号（10 = SERVO10 = AUX2）
+    ///     @param pwm          该通道要输出的 PWM 值（按下 1900，松开 1500）
+    Q_INVOKABLE void sendWaterSamplingServo(int servoChannel, float pwm);
+
+    /// 触发一次水质采样：依次写瓶号 → 容量 → 触发上升沿，200 ms 后自动把触发通道
+    /// 复位到中位值（否则下一次点击不构成边沿）。采样杆 / 电磁阀 / 水泵的完整时序
+    /// 全部由飞控执行，QGC 不必也不应逐步发命令。
+    ///     @param bottle   1 号瓶 / 2 号瓶
+    ///     @param volumeMl 采样容量（毫升）
+    Q_INVOKABLE void requestWaterSample(int bottle, int volumeMl);
+
+    /// 本次采样的飞控端总时长（秒）：放杆 + 抽水 + 关泵延时 + 收杆，用于界面进度显示
+    Q_INVOKABLE double waterSampleDuration(int volumeMl) const;
+
+    int     waterMaxVolume        () const { return _waterMaxVolume; }
+    double  waterFlowRate         () const { return _waterFlowRate; }
+    double  waterOpenTime         () const { return _waterOpenTime; }
+    double  waterCloseDelay       () const { return _waterCloseDelay; }
+    double  waterCloseTime        () const { return _waterCloseTime; }
+    int     waterTriggerChannel   () const { return _waterTriggerChannel; }
+    int     waterBottleChannel    () const { return _waterBottleChannel; }
+    int     waterVolumeChannel    () const { return _waterVolumeChannel; }
+    bool    waterSamplingSupported() const { return _waterSamplingSupported; }
+    bool    waterSamplingEnabled  () const { return _waterSamplingEnabled; }
+    bool    waterValveEnabled     () const { return _waterValveEnabled; }
+    bool    waterSamplingBusy     () const { return _waterSamplingPhase != WaterSamplingPhase::Idle; }
+    int     waterSamplingStage    () const { return static_cast<int>(_waterSamplingStage); }
+    int     waterPumpSeconds      () const { return _waterPumpSeconds; }
+
 signals:
     void coordinateChanged              (QGeoCoordinate coordinate);
     void mavlinkMessageReceived         (const mavlink_message_t& message);
@@ -829,6 +881,21 @@ signals:
 
     void mavlinkStatusChanged           ();
 
+    void waterSamplingParamsChanged     ();
+
+    /// 飞控确认采样已真正启动（收到 “WS: ... rod lowering” 进度消息）
+    void waterSamplingStarted           ();
+    /// 采样未能启动或中途失败：飞控拒绝（STATUSTEXT 告警）、舵机命令失败，或超时无确认
+    void waterSamplingFailed            (const QString& reason);
+    /// 飞控报告采样完成（收到 “WS: sample complete”）
+    void waterSamplingCompleted         ();
+    /// 采样命令序列的忙碌状态变化（对应 waterSamplingBusy 属性）
+    void waterSamplingBusyChanged       ();
+    /// 飞控回报的流程阶段变化（对应 waterSamplingStage 属性）
+    void waterSamplingStageChanged      ();
+    /// 飞控回报的抽水秒数变化（对应 waterPumpSeconds 属性）
+    void waterPumpSecondsChanged        ();
+
     void isROIEnabledChanged            ();
     void roiRelativeAltitudeMetersChanged();
     void roiCoordChanged                (const QGeoCoordinate& centerCoord);
@@ -866,6 +933,52 @@ private slots:
     void _gotProgressUpdate                 (float progressValue);
 
 private:
+    /// 采样命令序列的阶段。
+    ///
+    /// 三条写通道的命令必须**串行**：MavCommandQueue 对同一个 MAV_CMD_DO_SET_SERVO 不允许并发
+    /// （_canBeDuplicated 只放行 DO_MOTOR_TEST / SET_MESSAGE_INTERVAL），连发时后两条会被本地
+    /// 直接去重拒绝、合成一个 MAV_RESULT_FAILED，飞控只会收到第一条（瓶号），触发上升沿永远发不
+    /// 出去。所以每条命令都要等上一条 ACK 之后再发。
+    enum class WaterSamplingPhase {
+        Idle,      ///< 空闲
+        Bottle,    ///< 正在写瓶号通道
+        Volume,    ///< 正在写容量通道
+        Trigger,   ///< 正在写触发通道（构成上升沿）
+        Hold,      ///< 上升沿已发出，保持高电平等飞控的 update() 采到
+        Reset,     ///< 正在把触发通道复位到中位值，为下一次点击准备边沿
+    };
+
+    /// 采样流程阶段，由飞控的 STATUSTEXT **驱动**（QGC 不再本地估算时序）。
+    /// 数值通过 waterSamplingStage 属性暴露给 QML，QML 侧有一张同序号的文案表。
+    enum class WaterSamplingStage : int {
+        Idle           = 0,  ///< 空闲
+        BottleSelected = 1,  ///< 已选瓶，等待放杆 —— “WS: bottle %u %uml selected”
+        LoweringRod    = 2,  ///< 正在放杆 —— “WS: rod lowering”
+        Pumping        = 3,  ///< 正在抽水 —— “WS: pumping %us”
+        Settling       = 4,  ///< 关泵后延时 —— “WS: volume reached”
+        RetractingRod  = 5,  ///< 正在收杆 —— “WS: rod retracting”
+        Complete       = 6,  ///< 完成 —— “WS: sample complete”
+    };
+
+    void _updateWaterSamplingParams     ();
+    /// 解析飞控 “WS:” 开头的 STATUSTEXT，驱动 waterSamplingStarted / Completed / Failed
+    void _handleWaterSamplingStatusText (const QString& text);
+    /// 统一的舵机发送实现；ackHandlerInfo 为 nullptr 时不关心结果
+    void _sendWaterSamplingServo        (int servoChannel, float pwm, const MavCmdAckHandlerInfo_t* ackHandlerInfo);
+    /// 启动一次采样命令序列（串行发送）
+    void _startWaterSamplingSequence    (int bottle, int volumeMl);
+    /// 发送序列中的某一步
+    void _sendWaterSamplingStep         (WaterSamplingPhase phase);
+    /// 上一步的 ACK 到达后推进序列
+    void _handleWaterSamplingAck        (MAV_RESULT result, MavCmdResultFailureCode_t failureCode);
+    static void _waterSamplingAckEntry  (void* resultHandlerData, int compId,
+                                         const mavlink_command_ack_t& ack,
+                                         MavCmdResultFailureCode_t failureCode);
+    /// 中途失败时终止序列并回到空闲
+    void _abortWaterSamplingSequence    (const QString& reason);
+    /// 更新飞控回报的流程阶段（值不变时不发信号）
+    void _setWaterSamplingStage         (WaterSamplingStage stage);
+
     void _activeVehicleChanged          (Vehicle* newActiveVehicle);
     void _handlePing                    (LinkInterface* link, mavlink_message_t& message);
     void _handleHomePosition            (mavlink_message_t& message);
@@ -1129,6 +1242,26 @@ public:
     EscStatusFactGroupListModel*        _escStatusFactGroupListModel = nullptr;
 
     TerrainProtocolHandler* _terrainProtocolHandler = nullptr;
+
+    // ---- 水质采样（AP_WaterSampler / AP_WaterPump / AP_WaterValve）----
+    WaterSamplingPhase _waterSamplingPhase  = WaterSamplingPhase::Idle; ///< 命令序列阶段（Idle = 空闲）
+    WaterSamplingStage _waterSamplingStage  = WaterSamplingStage::Idle; ///< 飞控回报的流程阶段
+    int     _waterPumpSeconds       = 0;         ///< 固件回报的抽水秒数；0 = 还没收到
+    int     _waterSamplingBottle    = 1;         ///< 本次采样的瓶号，序列执行期间保存
+    int     _waterSamplingVolume    = 0;         ///< 本次采样的容量，序列执行期间保存
+    int     _waterMaxVolume         = 2000;      ///< WS_MAX_VOLUME 船体最大容量（ml）
+    double  _waterFlowRate          = 10.0;      ///< WS_FLOW_RATE 泵流速（ml/s）
+    double  _waterOpenTime          = 8.0;       ///< WS_OPEN_TIME 放下杆时间（s）
+    double  _waterCloseDelay        = 3.0;       ///< WS_CLOSE_DELAY 关泵后延时（s）
+    double  _waterCloseTime         = 8.0;       ///< WS_CLOSE_TIME 收杆时间（s）
+    int     _waterTriggerChannel    = 14;        ///< WS_TRIG_CHAN 采样触发通道
+    int     _waterBottleChannel     = 15;        ///< WS_BOTTLE_CHAN 瓶号通道
+    int     _waterVolumeChannel     = 16;        ///< WS_VOLUME_CHAN 容量通道
+    bool    _waterSamplingSupported = false;     ///< WS_BOTTLE_CHAN 与 WS_VOLUME_CHAN 是否同时存在（完整流程）
+    bool    _waterSamplingEnabled   = false;     ///< WS_ENABLE 是否 == 1
+    bool    _waterValveEnabled      = true;      ///< WS_VALVE_ENABLE 是否 == 1
+    bool    _waterSampleStartPending = false;    ///< 已发出采样命令，正在等待飞控的启动确认
+    int     _waterSampleSeq          = 0;        ///< 递增序号，用于作废过期的启动超时
 
     MissionManager*                 _missionManager             = nullptr;
     GeoFenceManager*                _geoFenceManager            = nullptr;

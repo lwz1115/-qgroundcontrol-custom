@@ -6,11 +6,14 @@
         "autoStreamConfig": "QGroundControl.videoManager.autoStreamConfigured",
         "sourceDisabled": "videoSource === QGroundControl.settingsManager.videoSettings.disabledVideoSource",
         "isStreamSource": "QGroundControl.videoManager.isStreamSource",
-        "rtpLatencyVisible": "!QGroundControl.settingsManager.videoSettings.lowLatencyMode.rawValue"
+        "rtpLatencyVisible": "!QGroundControl.settingsManager.videoSettings.lowLatencyMode.rawValue",
+        "videoSource2": "QGroundControl.settingsManager.videoSettings.videoSource2.rawValue",
+        "bothSourcesDisabled": "videoSource === QGroundControl.settingsManager.videoSettings.disabledVideoSource && videoSource2 === QGroundControl.settingsManager.videoSettings.disabledVideoSource"
     },
     "groups": [
         {
-            "heading": "Video Source",
+            "heading": "视频源",
+            "headingId": "VideoSource",
             "keywords": ["video source", "camera", "stream"],
             "enableWhen": "!autoStreamConfig",
             "headingDescription": "autoStreamConfig ? qsTr(\"Mavlink camera stream is automatically configured\") : \"\"",
@@ -18,25 +21,42 @@
                 {
                     "setting": "videoSettings.videoSource",
                     "control": "combobox"
+                },
+                {
+                    "setting": "videoSettings.videoSource2",
+                    "control": "combobox"
                 }
             ]
         },
         {
-            "heading": "Connection",
+            "heading": "连接",
+            "headingId": "Connection",
             "keywords": ["rtsp", "tcp", "udp", "mpegts", "video url", "stream url"],
-            "showWhen": "!sourceDisabled && !autoStreamConfig",
+            "showWhen": "!bothSourcesDisabled && !autoStreamConfig",
             "controls": [
                 {
                     "setting": "videoSettings.rtspUrl",
                     "showWhen": "videoSource === QGroundControl.settingsManager.videoSettings.rtspVideoSource"
                 },
                 {
+                    "setting": "videoSettings.udpUrl",
+                    "showWhen": "videoSource === QGroundControl.settingsManager.videoSettings.udp264VideoSource || videoSource === QGroundControl.settingsManager.videoSettings.udp265VideoSource || videoSource === QGroundControl.settingsManager.videoSettings.mpegtsVideoSource"
+                },
+                {
                     "setting": "videoSettings.tcpUrl",
                     "showWhen": "videoSource === QGroundControl.settingsManager.videoSettings.tcpVideoSource"
                 },
                 {
-                    "setting": "videoSettings.udpUrl",
-                    "showWhen": "videoSource === QGroundControl.settingsManager.videoSettings.udp264VideoSource || videoSource === QGroundControl.settingsManager.videoSettings.udp265VideoSource || videoSource === QGroundControl.settingsManager.videoSettings.mpegtsVideoSource"
+                    "setting": "videoSettings.rtspUrl2",
+                    "showWhen": "videoSource2 === QGroundControl.settingsManager.videoSettings.rtspVideoSource"
+                },
+                {
+                    "setting": "videoSettings.udpUrl2",
+                    "showWhen": "videoSource2 === QGroundControl.settingsManager.videoSettings.udp264VideoSource || videoSource2 === QGroundControl.settingsManager.videoSettings.udp265VideoSource || videoSource2 === QGroundControl.settingsManager.videoSettings.mpegtsVideoSource"
+                },
+                {
+                    "setting": "videoSettings.tcpUrl2",
+                    "showWhen": "videoSource2 === QGroundControl.settingsManager.videoSettings.tcpVideoSource"
                 }
             ]
         },

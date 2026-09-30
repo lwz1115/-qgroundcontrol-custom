@@ -280,6 +280,7 @@ void VideoManager::_createVideoReceivers()
 #endif
     static const QStringList videoStreamList = {
         "videoContent",
+        "videoContent2",
         "thermalVideo"
     };
 
@@ -371,6 +372,9 @@ void VideoManager::startRecording(const QString &videoFile)
     const QString videoFileNameTemplate = savePath + "/" + videoFileUrl + ".%1" + ext;
 
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+        if (receiver->name() == QStringLiteral("videoContent2")) {
+            continue; // 摄像头2 是辅助观察画面，不进录像文件
+        }
         if (!receiver->started()) {
             qCDebug(VideoManagerLog) << "Video receiver is not ready.";
             continue;
@@ -400,6 +404,9 @@ void VideoManager::grabImage(const QString &imageFile)
     emit imageFileChanged(_imageFile);
 
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
+        if (receiver->name() == QStringLiteral("videoContent2")) {
+            continue; // 摄像头2 是辅助观察画面，不出截图
+        }
         receiver->takeScreenshot(_imageFile);
         // QSharedPointer<QQuickItemGrabResult> result = receiver->widget()->grabToImage(const QSize &targetSize = QSize())
     }
@@ -655,6 +662,9 @@ bool VideoManager::_updateVideoUri(VideoReceiver *receiver, const QString &uri)
 
     receiver->setUri(uri);
 
+    // Address changed: let this stream earn a fresh set of start attempts.
+    _startFailureCounts.remove(receiver);
+
     return true;
 }
 
@@ -689,20 +699,73 @@ bool VideoManager::_updateSettings(VideoReceiver *receiver)
         return settingsChanged;
     }
 
+    // 摄像头2：独立的一套来源枚举 + URL（videoSource2 + rtspUrl2/udpUrl2/tcpUrl2），
+    // 与主源逻辑对等：选 Disabled 或地址留空 = 不加载。
+    if (receiver->name() == QStringLiteral("videoContent2")) {
+        const auto camera2Uri = [](const QString& scheme, const QString& rawAddress) {
+            const QString address = rawAddress.trimmed();
+            if (address.isEmpty()) {
+                return QString();
+            }
+            // 地址已带协议前缀就原样用，否则补上（与主源的 userAddressUri 行为一致）
+            if (scheme.isEmpty() || address.startsWith(scheme + QLatin1String("://"), Qt::CaseInsensitive)) {
+                return address;
+            }
+            return QStringLiteral("%1://%2").arg(scheme, address);
+        };
+        const QString source2 = _videoSettings->videoSource2()->rawValue().toString();
+        QString uri;
+        if (source2 == VideoSettings::videoSourceRTSP) {
+            uri = camera2Uri(QString(), _videoSettings->rtspUrl2()->rawValue().toString());
+        } else if (source2 == VideoSettings::videoSourceUDPH264) {
+            uri = camera2Uri(QStringLiteral("udp"), _videoSettings->udpUrl2()->rawValue().toString());
+        } else if (source2 == VideoSettings::videoSourceUDPH265) {
+            uri = camera2Uri(QStringLiteral("udp265"), _videoSettings->udpUrl2()->rawValue().toString());
+        } else if (source2 == VideoSettings::videoSourceMPEGTS) {
+            uri = camera2Uri(QStringLiteral("mpegts"), _videoSettings->udpUrl2()->rawValue().toString());
+        } else if (source2 == VideoSettings::videoSourceTCP) {
+            uri = camera2Uri(QStringLiteral("tcp"), _videoSettings->tcpUrl2()->rawValue().toString());
+        }
+        settingsChanged |= _updateVideoUri(receiver, uri);
+        return settingsChanged;
+    }
+
     settingsChanged |= _updateUVC(receiver);
     settingsChanged |= _updateAutoStream(receiver);
 
     const QString source = _videoSettings->videoSource()->rawValue().toString();
+
+    // 用户填地址的几种源，地址为空时绝不能把 "udp://" 这种空地址交给 GStreamer：
+    // 空地址会让管线启动失败，而失败会经 onStartComplete(STATUS_FAIL) 触发每秒一次的重试，
+    // 那条路径最终导致 SEH 崩溃。这里直接回落成「不启动视频」，并给出一次可读的告警。
+    const auto userAddressUri = [&source](const QString& scheme, const Fact* addressFact) {
+        const QString address = addressFact ? addressFact->rawValue().toString().trimmed() : QString();
+        if (address.isEmpty()) {
+            qCWarning(VideoManagerLog) << "Video source" << source
+                                       << "has no address configured; leaving video disabled";
+            return QString();
+        }
+        // RTSP 地址允许省略协议前缀：缺省自动补 rtsp://，避免填 ip:port 时 GStreamer 报
+        // "Unsupported URI scheme"（不认识的 scheme 会走同样的启动失败路径）。
+        if (scheme.isEmpty() && !address.startsWith(QStringLiteral("rtsp://"), Qt::CaseInsensitive)) {
+            return QStringLiteral("rtsp://%1").arg(address);
+        }
+        return scheme.isEmpty() ? address : QStringLiteral("%1://%2").arg(scheme, address);
+    };
+
     if (source == VideoSettings::videoSourceUDPH264) {
-        settingsChanged |= _updateVideoUri(receiver, QStringLiteral("udp://%1").arg(_videoSettings->udpUrl()->rawValue().toString()));
+        settingsChanged |= _updateVideoUri(receiver, userAddressUri(QStringLiteral("udp"), _videoSettings->udpUrl()));
     } else if (source == VideoSettings::videoSourceUDPH265) {
-        settingsChanged |= _updateVideoUri(receiver, QStringLiteral("udp265://%1").arg(_videoSettings->udpUrl()->rawValue().toString()));
+        settingsChanged |= _updateVideoUri(
+            receiver, userAddressUri(QStringLiteral("udp265"), _videoSettings->udpUrl()));
     } else if (source == VideoSettings::videoSourceMPEGTS) {
-        settingsChanged |= _updateVideoUri(receiver, QStringLiteral("mpegts://%1").arg(_videoSettings->udpUrl()->rawValue().toString()));
+        settingsChanged |= _updateVideoUri(
+            receiver, userAddressUri(QStringLiteral("mpegts"), _videoSettings->udpUrl()));
     } else if (source == VideoSettings::videoSourceRTSP) {
-        settingsChanged |= _updateVideoUri(receiver, _videoSettings->rtspUrl()->rawValue().toString());
+        // RTSP 地址本身就是完整 URL，不再拼 scheme
+        settingsChanged |= _updateVideoUri(receiver, userAddressUri(QString(), _videoSettings->rtspUrl()));
     } else if (source == VideoSettings::videoSourceTCP) {
-        settingsChanged |= _updateVideoUri(receiver, QStringLiteral("tcp://%1").arg(_videoSettings->tcpUrl()->rawValue().toString()));
+        settingsChanged |= _updateVideoUri(receiver, userAddressUri(QStringLiteral("tcp"), _videoSettings->tcpUrl()));
     } else if (source == VideoSettings::videoSource3DRSolo) {
         settingsChanged |= _updateVideoUri(receiver, QStringLiteral("udp://0.0.0.0:5600"));
     } else if (source == VideoSettings::videoSourceParrotDiscovery) {
@@ -842,7 +905,9 @@ void VideoManager::_startReceiver(VideoReceiver *receiver)
     }
 
     const QString source = _videoSettings->videoSource()->rawValue().toString();
-    const uint32_t timeout = ((source == VideoSettings::videoSourceRTSP) ? _videoSettings->rtspTimeout()->rawValue().toUInt() : 3);
+    const bool isRtsp = (source == VideoSettings::videoSourceRTSP)
+                        || (receiver->name() == QStringLiteral("videoContent2"));
+    const uint32_t timeout = (isRtsp ? _videoSettings->rtspTimeout()->rawValue().toUInt() : 3);
 
     receiver->start(timeout);
 }
@@ -889,12 +954,21 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
         case VideoReceiver::STATUS_INVALID_URL:
         case VideoReceiver::STATUS_INVALID_STATE:
             break;
-        default:
-            // Rate limit restarts on start failure.
+        default: {
+            // Rate limit restarts on start failure. Give up after 3 consecutive failures so an
+            // unreachable / mistyped address can't keep spinning a pipeline forever; the counter
+            // resets when the address changes (_updateVideoUri) or the app restarts.
+            const int failures = ++_startFailureCounts[receiver];
+            if (failures >= 3) {
+                qCWarning(VideoManagerLog) << receiver->name() << "failed to start 3 times, giving up"
+                                           << "until the address changes or the app restarts";
+                break;
+            }
             QTimer::singleShot(1000, receiver, [this, receiver]() {
                 _restartVideo(receiver);
             });
             break;
+        }
         }
     });
 
@@ -921,7 +995,7 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
 
     (void) connect(receiver, &VideoReceiver::decodingChanged, this, [this, receiver](bool active) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "decoding changed, active:" << (active ? "yes" : "no");
-        if (!receiver->isThermal()) {
+        if (!receiver->isThermal() && (receiver->name() != QStringLiteral("videoContent2"))) {
             _decoding = active;
             emit decodingChanged();
         }
@@ -947,7 +1021,7 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
 
     (void) connect(receiver, &VideoReceiver::videoSizeChanged, this, [this, receiver](QSize size) {
         qCDebug(VideoManagerLog) << "Video" << receiver->name() << "resized. New resolution:" << size.width() << "x" << size.height();
-        if (!receiver->isThermal()) {
+        if (!receiver->isThermal() && (receiver->name() != QStringLiteral("videoContent2"))) {
             _videoSize = size;
             emit videoSizeChanged();
             emit aspectRatioChanged();
@@ -971,7 +1045,10 @@ void VideoManager::_initVideoReceiver(VideoReceiver *receiver, QQuickWindow *win
 
     (void) _updateSettings(receiver);
 
-    if (hasVideo()) {
+    if (receiver->name() == QStringLiteral("videoContent2")) {
+        // 摄像头2 独立于主视频源：只要 rtspUrl2 非空就启动（空地址 _startReceiver 内部直接返回）。
+        _startReceiver(receiver);
+    } else if (hasVideo()) {
         _startReceiver(receiver);
     }
 }

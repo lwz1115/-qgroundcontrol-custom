@@ -37,9 +37,12 @@ public:
     /// Example: "/Users/Don/Document/QGroundControl/Missions" returns "QGroundControl/Missions"
     Q_INVOKABLE static QString fullFolderPathToShortMobilePath(const QString &fullFolderPath);
 
-    /// Opens Android's native file picker (ACTION_OPEN_DOCUMENT).
+    /// Opens Android's native file picker (ACTION_OPEN_DOCUMENT) and copies the picked file into destPath.
     /// On non-Android platforms this is a no-op.
-    Q_INVOKABLE void importFromNativePicker();
+    ///     @param destPath          Folder the picked file is copied into (the same folder QGC lists).
+    ///     @param allowedExtensions Accepted extensions as they appear in nameFilters, e.g.
+    ///                              { "*.xlsx", "*.csv" }. Empty keeps the mission-import default (".plan").
+    Q_INVOKABLE void importFromNativePicker(const QString& destPath, const QStringList& allowedExtensions);
 
     /// @name Unit test file dialog shim
     /// Native file dialogs cannot be driven from automated tests. Tests arm the

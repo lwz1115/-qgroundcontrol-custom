@@ -52,6 +52,7 @@ DECLARE_SETTINGGROUP(Video, "Video")
     }
 
     _nameToMetaDataMap[videoSourceName]->setEnumInfo(videoSourceCookedList, videoSourceList);
+    _nameToMetaDataMap[videoSource2Name]->setEnumInfo(videoSourceCookedList, videoSourceList);
 
     _setForceVideoDecodeList();
 
@@ -109,6 +110,19 @@ DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, videoSource)
         connect(_videoSourceFact, &Fact::valueChanged, this, &VideoSettings::_configChanged);
     }
     return _videoSourceFact;
+}
+
+DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, videoSource2)
+{
+    if (!_videoSource2Fact) {
+        _videoSource2Fact = _createSettingsFact(videoSource2Name);
+        //-- Check for sources no longer available
+        if (!_videoSource2Fact->enumValues().contains(_videoSource2Fact->rawValue().toString())) {
+            _videoSource2Fact->setRawValue(_noVideo ? videoSourceNoVideo : videoDisabled);
+        }
+        connect(_videoSource2Fact, &Fact::valueChanged, this, &VideoSettings::_configChanged);
+    }
+    return _videoSource2Fact;
 }
 
 DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, forceVideoDecoder)
@@ -218,6 +232,33 @@ DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, rtspUrl)
         connect(_rtspUrlFact, &Fact::valueChanged, this, &VideoSettings::_configChanged);
     }
     return _rtspUrlFact;
+}
+
+DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, rtspUrl2)
+{
+    if (!_rtspUrl2Fact) {
+        _rtspUrl2Fact = _createSettingsFact(rtspUrl2Name);
+        connect(_rtspUrl2Fact, &Fact::valueChanged, this, &VideoSettings::_configChanged);
+    }
+    return _rtspUrl2Fact;
+}
+
+DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, udpUrl2)
+{
+    if (!_udpUrl2Fact) {
+        _udpUrl2Fact = _createSettingsFact(udpUrl2Name);
+        connect(_udpUrl2Fact, &Fact::valueChanged, this, &VideoSettings::_configChanged);
+    }
+    return _udpUrl2Fact;
+}
+
+DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, tcpUrl2)
+{
+    if (!_tcpUrl2Fact) {
+        _tcpUrl2Fact = _createSettingsFact(tcpUrl2Name);
+        connect(_tcpUrl2Fact, &Fact::valueChanged, this, &VideoSettings::_configChanged);
+    }
+    return _tcpUrl2Fact;
 }
 
 DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, tcpUrl)

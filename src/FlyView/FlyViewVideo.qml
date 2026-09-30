@@ -1,4 +1,5 @@
 import QtQuick
+import QtMultimedia
 
 import QGroundControl
 import QGroundControl.Controls
@@ -8,6 +9,31 @@ Item {
 
     property Item pipView
     property Item pipState: videoPipState
+
+    // ---- 双摄像头主辅状态 ----
+    // 主画面（摄像头1）是否有源：由主视频源枚举决定（RTSP/UDP/TCP/… 或 UVC）
+    readonly property bool _cam1StreamActive: QGroundControl.videoManager.isStreamSource
+                                               || QGroundControl.videoManager.isUvc
+    // 摄像头2 是否配置了 RTSP 地址（留空 = 不使用）
+    // 摄像头2 是否启用：视频二来源不是 Disabled（来源下拉本身就是开关）
+    readonly property bool _cam2Configured:   QGroundControl.settingsManager.videoSettings.videoSource2.rawValue
+                                              !== QGroundControl.settingsManager.videoSettings.disabledVideoSource
+    // 手动主辅切换（按钮翻转）：false = 摄像头1 主，true = 摄像头2 主。仅双配置时生效。
+    property bool _cam2IsMainManual: false
+    // 生效的主辅：只填了摄像头2（主源未启用）时它自动为主；双配置时跟随手动开关。
+    readonly property bool _cam2IsMain: _cam2Configured && (!_cam1StreamActive || _cam2IsMainManual)
+    // 辅画面小窗尺寸：主画面铺满，辅画面叠在右下角；按主画面比例，窗口放大时同比放大
+    readonly property real _pipSubWidth:   _root.width * 0.35
+    readonly property real _pipSubHeight:  _pipSubWidth * 0.5625
+    readonly property real _pipMargin:     ScreenTools.defaultFontPixelHeight * 0.5
+    // 切换按钮可见条件：小窗太小会遮挡画面 → 隐藏；全屏，或主画面放大到约 100 字宽以上才显示。
+    readonly property bool _showSwitch: {
+        if (_root.pipState.state === _root.pipState.fullState) {
+            return true
+        }
+        const mainWidth = _root._cam2IsMain ? cam2View.width : videoStreaming.width
+        return mainWidth >= (ScreenTools.defaultFontPixelWidth * 100)
+    }
 
     PipState {
         id:         videoPipState
@@ -39,12 +65,62 @@ Item {
         onTriggered:  QGroundControl.videoManager.startVideo()
     }
 
-    //-- Video Streaming
+    //-- Video Streaming（摄像头1 渲染区）：主时铺满，辅时缩到右下小窗
     FlightDisplayViewVideo {
         id:             videoStreaming
-        anchors.fill:   parent
+        x:              _root._cam2IsMain ? _root.width - width - _root._pipMargin : 0
+        y:              _root._cam2IsMain ? _root.height - height - _root._pipMargin : 0
+        width:          _root._cam2IsMain ? _root._pipSubWidth : _root.width
+        height:         _root._cam2IsMain ? _root._pipSubHeight : _root.height
+        z:              _root._cam2IsMain ? 10 : 0
         useSmallFont:   _root.pipState.state !== _root.pipState.fullState
         visible:        QGroundControl.videoManager.isStreamSource || QGroundControl.videoManager.isUvc
+    }
+
+    //-- 摄像头2 渲染区：配置了 rtspUrl2 才显示；主时铺满，辅时缩到右下小窗
+    Rectangle {
+        id:             cam2View
+        visible:        _root._cam2Configured
+        x:              _root._cam2IsMain ? 0 : _root.width - width - _root._pipMargin
+        y:              _root._cam2IsMain ? 0 : _root.height - height - _root._pipMargin
+        width:          _root._cam2IsMain ? _root.width : _root._pipSubWidth
+        height:         _root._cam2IsMain ? _root.height : _root._pipSubHeight
+        z:              _root._cam2IsMain ? 0 : 10
+        color:          "black"
+        border.color:   Qt.rgba(1, 1, 1, _root._cam2IsMain ? 0 : 0.45)
+        border.width:   1
+
+        VideoOutput {
+            objectName: "videoContent2"
+            anchors.fill: parent
+            fillMode:       VideoOutput.PreserveAspectFit
+        }
+
+        // 摄像头2 角标（辅画面时显示）
+        QGCLabel {
+            text:            qsTr("Camera 2")
+            color:           "white"
+            font.pointSize:  ScreenTools.smallFontPointSize
+            anchors.top:     parent.top
+            anchors.left:    parent.left
+            anchors.margins: ScreenTools.defaultFontPixelHeight * 0.3
+            visible:         !_root._cam2IsMain
+        }
+    }
+
+    //-- 切换按钮：贴在当前辅画面左上角；仅两路都启用时可切（Q2=D）
+    QGCButton {
+        id:              camSwitchButton
+        text:            "⇌"
+        z:               20
+        width:           ScreenTools.defaultFontPixelHeight * 1.5
+        height:          width
+        visible:         _root._showSwitch && _root._cam1StreamActive && _root._cam2Configured
+        anchors.top:       (_root._cam2IsMain ? videoStreaming : cam2View).top
+        anchors.left:      (_root._cam2IsMain ? videoStreaming : cam2View).left
+        anchors.topMargin:  ScreenTools.defaultFontPixelHeight * 1.6 // 让开左上角“Camera 2”角标
+        anchors.leftMargin: _root._pipMargin
+        onClicked:          _root._cam2IsMainManual = !_root._cam2IsMainManual
     }
 
     QGCLabel {

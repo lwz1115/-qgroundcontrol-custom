@@ -41,7 +41,9 @@ Item {
         anchors.fill: parent
         onWidthChanged:  requestPaint()
         onHeightChanged: requestPaint()
-        onPaint:         control._paintChart(ctx)
+        // Canvas 没有内建的 ctx 变量，2D 上下文必须用 getContext("2d") 取，
+        // 否则 ctx 是 undefined，绘制函数第一行就抛异常，画布永远空白
+        onPaint:         control._paintChart(getContext("2d"))
     }
 
     /// 每条曲线的显示数据：{ key, label, color, points: [{x, y}], min, max }
@@ -223,6 +225,18 @@ Item {
         for (const series of activeSeries) {
             ctx.strokeStyle = series.color
             ctx.beginPath()
+
+            // 刚开始采集时只有一个点，画个圆点，让用户看到曲线从第一个数据就开始了
+            if (series.points.length === 1) {
+                const onlyPoint = series.points[0]
+                ctx.fillStyle = series.color
+                ctx.beginPath()
+                ctx.arc(xToPixel(onlyPoint.x), yToPixel(onlyPoint.y, series),
+                        Math.max(2, labelFont * 0.18), 0, Math.PI * 2)
+                ctx.fill()
+                continue
+            }
+
             let started = false
             for (const point of series.points) {
                 const x = xToPixel(point.x)

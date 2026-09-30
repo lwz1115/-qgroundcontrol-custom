@@ -3,6 +3,7 @@
 #include <QtCore/QJniEnvironment>
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 
 #include <functional>
 
@@ -11,8 +12,13 @@ void setNativeMethods();
 bool checkStoragePermissions();
 QString getSDCardPath();
 void setKeepScreenOn(bool on);
-void openFileImportDialog(const QString& destPath, std::function<void(const QString&)> callback);
-
+/// Opens Android's native file picker (ACTION_OPEN_DOCUMENT) and copies the picked file into destPath.
+///     @param destPath          Folder the picked file is copied into.
+///     @param allowedExtensions Accepted extensions, e.g. { ".xlsx", ".csv" }. Empty keeps the
+///                              mission-import default (".plan").
+///     @param callback          Receives the fully-qualified local path of the copy, empty on failure.
+void openFileImportDialog(const QString& destPath, const QStringList& allowedExtensions,
+                          std::function<void(const QString&)> callback);
 constexpr const char* kJniQGCActivityClassName = "org/mavlink/qgroundcontrol/QGCActivity";
 
 template <typename T>

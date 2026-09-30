@@ -1676,6 +1676,8 @@ void Vehicle::_parametersReady(bool parametersReady)
         _setupAutoDisarmSignalling();
     }
 
+    _updateWaterSamplingParams();
+
     _multirotor_speed_limits_available = _firmwarePlugin->mulirotorSpeedLimitsAvailable(this);
     _fixed_wing_airspeed_limits_available = _firmwarePlugin->fixedWingAirSpeedLimitsAvailable(this);
 
@@ -3129,6 +3131,281 @@ void Vehicle::sendGripperAction(GRIPPER_ACTIONS gripperAction)
             gripperAction);         // Param2: Gripper Action
 }
 
+void Vehicle::sendWaterSamplingServo(int servoChannel, float pwm)
+{
+    _sendWaterSamplingServo(servoChannel, pwm, nullptr);
+}
+
+void Vehicle::_sendWaterSamplingServo(int servoChannel, float pwm, const MavCmdAckHandlerInfo_t* ackHandlerInfo)
+{
+    // 通道号非法时直接丢弃，避免把无效指令发到飞控
+    if (servoChannel < 1) {
+        qCWarning(VehicleLog) << "Ignoring request, invalid servo channel:" << servoChannel;
+        return;
+    }
+
+    // 这条日志是排查“发出去的通道号到底是多少”的唯一依据，别删
+    qCDebug(VehicleLog) << "Water sampling servo, channel:" << servoChannel << "pwm:" << pwm;
+
+    // param1 = 1 基通道号，param2 = PWM。sendMavCommandWithHandler 没有 showError 参数，
+    // 失败原因由 ackHandlerInfo 回调给出，不会再弹 “Waiting on previous response” 那类提示。
+    sendMavCommandWithHandler(ackHandlerInfo,
+                              _defaultComponentId,
+                              MAV_CMD_DO_SET_SERVO,
+                              static_cast<float>(servoChannel),
+                              pwm,
+                              0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+}
+
+void Vehicle::requestWaterSample(int bottle, int volumeMl)
+{
+    // 前置自检：不满足时直接告知原因，绝不进入“界面在跑、机构没动”的状态
+    if (!_waterSamplingSupported) {
+        emit waterSamplingFailed(
+            tr("Firmware does not report the water sampling pipeline "
+               "(WS_BOTTLE_CHAN / WS_VOLUME_CHAN missing). Update the flight controller."));
+        return;
+    }
+    if (!_waterSamplingEnabled) {
+        emit waterSamplingFailed(tr("Water sampling is disabled on the firmware (WS_ENABLE = 0)."));
+        return;
+    }
+    if (volumeMl < 1) {
+        qCWarning(VehicleLog) << "Ignoring request, invalid volume:" << volumeMl;
+        emit waterSamplingFailed(tr("Invalid sampling volume."));
+        return;
+    }
+    // 第一层保护：上一个命令序列还在发送中，此时再发会与它抢同一个命令 ID
+    if (_waterSamplingPhase != WaterSamplingPhase::Idle) {
+        qCDebug(VehicleLog) << "Ignoring click, sequence busy, phase:"
+                            << static_cast<int>(_waterSamplingPhase);
+        emit waterSamplingFailed(tr("A sampling command sequence is still in progress."));
+        return;
+    }
+
+    _startWaterSamplingSequence(bottle, volumeMl);
+}
+
+void Vehicle::_startWaterSamplingSequence(int bottle, int volumeMl)
+{
+    _waterSamplingBottle = bottle;
+    _waterSamplingVolume = volumeMl;
+
+    // 清掉上一次残留的阶段，等飞控的 “WS: bottle … selected” 重新点亮
+    _setWaterSamplingStage(WaterSamplingStage::Idle);
+
+    // 先进入“等待飞控确认”状态再发命令，避免确认消息抢先到达时被漏掉
+    _waterSampleStartPending = true;
+    const int seq = ++_waterSampleSeq;
+
+    // 串行发送：瓶号 → 容量 → 触发上升沿。顺序不能反，飞控只在触发边沿那一刻读前两个。
+    _sendWaterSamplingStep(WaterSamplingPhase::Bottle);
+
+    // 启动确认：固件在触发瞬间就发「WS: bottle %u %uml selected」；被拒绝时发 WARNING 级告警
+    // （容量通道不可用 / 没选容量 / 超上限 / 流速非正 —— 这 4 种一条机构命令都不执行，但 ACK 仍
+    // 是 ACCEPTED）。所以 2 秒内既没收到启动确认也没收到告警，就认定没启动，通知界面回滚并提示。
+    QTimer::singleShot(2000, this, [this, seq]() {
+        if (seq != _waterSampleSeq || !_waterSampleStartPending) {
+            return;
+        }
+        _waterSampleStartPending = false;
+        emit waterSamplingFailed(
+            tr("Firmware did not confirm the sampling start within 2 s. "
+               "Check WS_ENABLE and the servo channel assignment."));
+    });
+}
+
+void Vehicle::_sendWaterSamplingStep(WaterSamplingPhase phase)
+{
+    int   channel = 0;
+    float pwm     = 0.0f;
+
+    switch (phase) {
+    case WaterSamplingPhase::Bottle:
+        channel = _waterBottleChannel;
+        // 飞控判据：PWM > 1500 为 2 号瓶，否则 1 号瓶
+        pwm     = (_waterSamplingBottle == 2) ? 1900.0f : 1500.0f;
+        break;
+    case WaterSamplingPhase::Volume:
+        channel = _waterVolumeChannel;
+        pwm     = static_cast<float>(_waterSamplingVolume);
+        break;
+    case WaterSamplingPhase::Trigger:
+        channel = _waterTriggerChannel;
+        pwm     = 1900.0f;
+        break;
+    case WaterSamplingPhase::Reset:
+        channel = _waterTriggerChannel;
+        pwm     = 1500.0f;
+        break;
+    case WaterSamplingPhase::Hold:
+    case WaterSamplingPhase::Idle:
+        return;
+    }
+
+    const bool wasIdle = (_waterSamplingPhase == WaterSamplingPhase::Idle);
+    _waterSamplingPhase = phase;
+    if (wasIdle) {
+        emit waterSamplingBusyChanged();
+    }
+
+    MavCmdAckHandlerInfo_t handlerInfo = {};
+    handlerInfo.resultHandler     = _waterSamplingAckEntry;
+    handlerInfo.resultHandlerData = this;
+
+    _sendWaterSamplingServo(channel, pwm, &handlerInfo);
+}
+
+void Vehicle::_waterSamplingAckEntry(void* resultHandlerData, int /*compId*/,
+                                     const mavlink_command_ack_t& ack,
+                                     MavCmdResultFailureCode_t failureCode)
+{
+    static_cast<Vehicle*>(resultHandlerData)->_handleWaterSamplingAck(
+        static_cast<MAV_RESULT>(ack.result), failureCode);
+}
+
+void Vehicle::_handleWaterSamplingAck(MAV_RESULT result, MavCmdResultFailureCode_t failureCode)
+{
+    // 失败码不等于“飞控拒绝”：MavCommandQueue 在本地去重、链路断开、超时无应答时也会合成一个
+    // MAV_RESULT_FAILED，此时飞控根本没收到这条命令。只有 MavCmdResultCommandResultOnly 时，
+    // result 才是飞控的真实结果码。
+    if ((failureCode != MavCmdResultCommandResultOnly) || (result != MAV_RESULT_ACCEPTED)) {
+        QString reason;
+        switch (failureCode) {
+        case MavCmdResultFailureDuplicateCommand:
+            reason = tr("Internal error: another servo command was still pending.");
+            break;
+        case MavCmdResultFailureNoResponseToCommand:
+            reason = tr("The vehicle did not respond to the servo command.");
+            break;
+        default:
+            reason = tr("The vehicle rejected the servo command (result %1).").arg(static_cast<int>(result));
+            break;
+        }
+        _abortWaterSamplingSequence(reason);
+        return;
+    }
+
+    switch (_waterSamplingPhase) {
+    case WaterSamplingPhase::Bottle:
+        _sendWaterSamplingStep(WaterSamplingPhase::Volume);
+        break;
+    case WaterSamplingPhase::Volume:
+        _sendWaterSamplingStep(WaterSamplingPhase::Trigger);
+        break;
+    case WaterSamplingPhase::Trigger:
+        // 上升沿已发出，保持高电平超过飞控 update() 的 10 Hz 周期后再复位。
+        // 复位是同一条命令 ID，必须在队列空之后再发，否则会被本地去重拦掉。
+        _waterSamplingPhase = WaterSamplingPhase::Hold;
+        QTimer::singleShot(200, this, [this]() {
+            if (_waterSamplingPhase == WaterSamplingPhase::Hold) {
+                _sendWaterSamplingStep(WaterSamplingPhase::Reset);
+            }
+        });
+        break;
+    case WaterSamplingPhase::Reset:
+        _waterSamplingPhase = WaterSamplingPhase::Idle;
+        emit waterSamplingBusyChanged();
+        break;
+    default:
+        break;
+    }
+}
+
+void Vehicle::_abortWaterSamplingSequence(const QString& reason)
+{
+    const bool wasBusy = (_waterSamplingPhase != WaterSamplingPhase::Idle);
+    if (!wasBusy && !_waterSampleStartPending) {
+        return;   // 已经空闲，避免重复弹框
+    }
+
+    _waterSamplingPhase      = WaterSamplingPhase::Idle;
+    _waterSampleStartPending = false;
+    ++_waterSampleSeq;   // 作废启动超时
+    _setWaterSamplingStage(WaterSamplingStage::Idle);
+
+    if (wasBusy) {
+        emit waterSamplingBusyChanged();
+    }
+    emit waterSamplingFailed(reason);
+}
+
+double Vehicle::waterSampleDuration(int volumeMl) const
+{
+    const double flowRate = (_waterFlowRate > 0.0) ? _waterFlowRate : 10.0;
+    const double pumpSec  = static_cast<double>(qMax(0, volumeMl)) / flowRate;
+
+    return _waterOpenTime + pumpSec + _waterCloseDelay + _waterCloseTime;
+}
+
+void Vehicle::_updateWaterSamplingParams()
+{
+    if (!_parameterManager) {
+        return;
+    }
+
+    const int compId = _defaultComponentId;
+
+    // getParameter() 对不存在的参数会向用户弹“参数缺失”提示。WS_ENABLE 为 0 时它后面同组的
+    // WS_ 参数都会从列表中消失，老固件则根本没有这些参数，两种情况都要静默回落到默认值。
+    const auto readParam = [this, compId](const char* name, double defaultValue) {
+        const QString paramName = QString::fromLatin1(name);
+        if (!_parameterManager->parameterExists(compId, paramName)) {
+            return defaultValue;
+        }
+        const Fact* fact = _parameterManager->getParameter(compId, paramName);
+        if (!fact || fact->rawValue().isNull()) {
+            return defaultValue;
+        }
+        bool ok = false;
+        const double value = fact->rawValue().toDouble(&ok);
+
+        return ok ? value : defaultValue;
+    };
+
+    const int    newMax   = qBound(1,  qRound(readParam("WS_MAX_VOLUME", 2000)), 100000);
+    const double newFlow  = qMax(0.1, readParam("WS_FLOW_RATE", 10.0));
+    const double newOpen  = qMax(0.0, readParam("WS_OPEN_TIME", 8.0));
+    const double newDelay = qMax(0.0, readParam("WS_CLOSE_DELAY", 3.0));
+    const double newClose = qMax(0.0, readParam("WS_CLOSE_TIME", 8.0));
+    const int    newTrig  = qBound(1,  qRound(readParam("WS_TRIG_CHAN", 14.0)), 16);
+    const int    newBott  = qBound(1,  qRound(readParam("WS_BOTTLE_CHAN", 15.0)), 16);
+    const int    newVol   = qBound(1,  qRound(readParam("WS_VOLUME_CHAN", 16.0)), 16);
+    // 版本探测：完整流程的标志是 WS_BOTTLE_CHAN 与 WS_VOLUME_CHAN 同时存在（v7+）。
+    // WS_ENABLE 从第一版采样杆固件起就有，不能当支持标志，否则 v5 会被误判为“支持”
+    // （v5 听的是通道 10，QGC 却往 14/15/16 写，结果一条命令都不生效）。
+    const bool hasBottleChan = _parameterManager->parameterExists(compId, QStringLiteral("WS_BOTTLE_CHAN"));
+    const bool hasVolumeChan = _parameterManager->parameterExists(compId, QStringLiteral("WS_VOLUME_CHAN"));
+    const bool fullPipeline  = hasBottleChan && hasVolumeChan;
+    // WS_ENABLE 是 AP_PARAM_FLAG_ENABLE 标志参数，它不会隐藏自己，任何时候都读得到
+    const bool enabled       = _parameterManager->parameterExists(compId, QStringLiteral("WS_ENABLE"))
+                            && qRound(readParam("WS_ENABLE", 0.0)) != 0;
+    // WS_VALVE_ENABLE 缺失时按“视为开启”处理，避免老固件被误报
+    const bool valveEnabled  = !_parameterManager->parameterExists(compId, QStringLiteral("WS_VALVE_ENABLE"))
+                            || qRound(readParam("WS_VALVE_ENABLE", 1.0)) != 0;
+
+    if (newMax   != _waterMaxVolume           || newFlow  != _waterFlowRate        ||
+        newOpen  != _waterOpenTime           || newDelay != _waterCloseDelay      ||
+        newClose != _waterCloseTime          || newTrig  != _waterTriggerChannel  ||
+        newBott  != _waterBottleChannel      || newVol   != _waterVolumeChannel   ||
+        fullPipeline != _waterSamplingSupported ||
+        enabled      != _waterSamplingEnabled   ||
+        valveEnabled != _waterValveEnabled) {
+        _waterMaxVolume         = newMax;
+        _waterFlowRate          = newFlow;
+        _waterOpenTime          = newOpen;
+        _waterCloseDelay        = newDelay;
+        _waterCloseTime         = newClose;
+        _waterTriggerChannel    = newTrig;
+        _waterBottleChannel     = newBott;
+        _waterVolumeChannel     = newVol;
+        _waterSamplingSupported = fullPipeline;
+        _waterSamplingEnabled   = enabled;
+        _waterValveEnabled      = valveEnabled;
+        emit waterSamplingParamsChanged();
+    }
+}
+
 void Vehicle::setEstimatorOrigin(const QGeoCoordinate& centerCoord)
 {
     // Prefer MAV_CMD_DO_SET_GLOBAL_ORIGIN (sent as COMMAND_INT, supersedes SET_GPS_GLOBAL_ORIGIN).
@@ -3416,6 +3693,9 @@ void Vehicle::_onStatusTextFromEvent(uint8_t compid, int severity, const QString
 
 void Vehicle::_textMessageReceived(MAV_COMPONENT componentid, MAV_SEVERITY severity, QString text, QString description)
 {
+    // 水质采样：固件用 “WS:” 前缀回报启动确认与拒绝原因，先在这里消费掉
+    _handleWaterSamplingStatusText(text);
+
     // PX4 backwards compatibility: messages sent out ending with a tab are also sent as event
     if (px4Firmware() && text.endsWith('\t')) {
         qCDebug(VehicleLog) << "Dropping message (expected as event):" << text;
@@ -3465,6 +3745,94 @@ void Vehicle::_errorMessageReceived(QString message)
         vehicleIdPrefix = tr("Vehicle %1: ").arg(id());
     }
     QGC::showCriticalVehicleMessage(vehicleIdPrefix + message);
+}
+
+void Vehicle::_handleWaterSamplingStatusText(const QString& text)
+{
+    if (!text.startsWith(QStringLiteral("WS:"), Qt::CaseInsensitive)) {
+        return;
+    }
+
+    // ---- 告警（固件 WARNING 级）----
+    // 这 4 种情况下飞控一条机构命令都不执行，但 COMMAND_ACK 仍回 ACCEPTED，只能靠文本识别。
+    // 必须排在启动确认之前：「WS: no volume selected on channel %d」也含 “selected”。
+    static const char* const warningKeys[] = {
+        "is not available",    // WS: volume channel %d is not available
+        "no volume selected",  // WS: no volume selected on channel %d
+        "exceeds the",         // WS: %uml exceeds the %dml limit
+        "must be positive",    // WS: WS_FLOW_RATE must be positive
+    };
+    for (const char* key : warningKeys) {
+        if (text.contains(QString::fromLatin1(key), Qt::CaseInsensitive)) {
+            _waterSampleStartPending = false;
+            ++_waterSampleSeq;   // 作废启动超时
+            qCDebug(VehicleLog) << "Water sampling rejected:" << text;
+            emit waterSamplingFailed(text);
+            return;
+        }
+    }
+
+    // ---- 启动 / 进度：固件在触发瞬间就发「WS: bottle %u %uml selected」，之后依次是
+    // rod lowering → pumping %us → volume reached → rod retracting → sample complete ----
+    if (text.contains(QStringLiteral("selected"), Qt::CaseInsensitive)) {
+        _waterSampleStartPending = false;
+        ++_waterSampleSeq;   // 作废启动超时
+        _setWaterSamplingStage(WaterSamplingStage::BottleSelected);
+        qCDebug(VehicleLog) << "Water sampling confirmed started:" << text;
+        emit waterSamplingStarted();
+        return;
+    }
+
+    if (text.contains(QStringLiteral("rod lowering"), Qt::CaseInsensitive)) {
+        _setWaterSamplingStage(WaterSamplingStage::LoweringRod);
+        return;
+    }
+
+    if (text.contains(QStringLiteral("pumping"), Qt::CaseInsensitive)) {
+        // 文本形如「WS: pumping 123s」，从中抽出固件自己报的抽水秒数
+        const QStringList parts = text.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        for (const QString& part : parts) {
+            if (!part.endsWith(QLatin1Char('s'), Qt::CaseInsensitive)) {
+                continue;
+            }
+            bool ok = false;
+            const int seconds = part.chopped(1).toInt(&ok);
+            if (ok && (seconds != _waterPumpSeconds)) {
+                _waterPumpSeconds = seconds;
+                emit waterPumpSecondsChanged();
+            }
+            break;
+        }
+        _setWaterSamplingStage(WaterSamplingStage::Pumping);
+        return;
+    }
+
+    if (text.contains(QStringLiteral("volume reached"), Qt::CaseInsensitive)) {
+        _setWaterSamplingStage(WaterSamplingStage::Settling);
+        return;
+    }
+
+    if (text.contains(QStringLiteral("rod retracting"), Qt::CaseInsensitive)) {
+        _setWaterSamplingStage(WaterSamplingStage::RetractingRod);
+        return;
+    }
+
+    // ---- 完成：收杆完成 ----
+    if (text.contains(QStringLiteral("sample complete"), Qt::CaseInsensitive)) {
+        _setWaterSamplingStage(WaterSamplingStage::Complete);
+        qCDebug(VehicleLog) << "Water sampling completed:" << text;
+        emit waterSamplingCompleted();
+        return;
+    }
+}
+
+void Vehicle::_setWaterSamplingStage(WaterSamplingStage stage)
+{
+    if (_waterSamplingStage == stage) {
+        return;
+    }
+    _waterSamplingStage = stage;
+    emit waterSamplingStageChanged();
 }
 
 /*---------------------------------------------------------------------------*/

@@ -169,25 +169,25 @@ QUrl QGCFileDialogController::localFileToUrl(const QString &localFile)
     return localFile.isEmpty() ? QUrl() : QUrl::fromLocalFile(localFile);
 }
 
-void QGCFileDialogController::importFromNativePicker()
+void QGCFileDialogController::importFromNativePicker(const QString& destPath, const QStringList& allowedExtensions)
 {
 #ifdef Q_OS_ANDROID
-    const QString missionPath = SettingsManager::instance()->appSettings()->missionSavePath();
-    if (missionPath.isEmpty()) {
-        qCWarning(QGCFileDialogControllerLog) << "Missions save path is empty";
-        emit importFailed(tr("Missions directory is not configured"));
+    if (destPath.isEmpty()) {
+        qCWarning(QGCFileDialogControllerLog) << "Import destination path is empty";
+        emit importFailed(tr("Import destination directory is not configured"));
         return;
     }
 
-    QDir dir(missionPath);
-    if (!dir.exists()) {
-        qCWarning(QGCFileDialogControllerLog) << "Missions save path does not exist";
-        emit importFailed(tr("Missions save path does not exist"));
+    // 目标目录可能还不存在（换过 savePath 就会），先建出来，否则拷贝必然失败
+    QDir dir(destPath);
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+        qCWarning(QGCFileDialogControllerLog) << "Import destination does not exist and cannot be created:" << destPath;
+        emit importFailed(tr("Import destination directory does not exist"));
         return;
     }
 
     QPointer<QGCFileDialogController> self = this;
-    AndroidInterface::openFileImportDialog(missionPath, [self](const QString& filePath) {
+    AndroidInterface::openFileImportDialog(destPath, allowedExtensions, [self](const QString& filePath) {
         if (self) {
             QMetaObject::invokeMethod(
                 self,

@@ -9,8 +9,8 @@ import QGroundControl.Controls
 ///
 /// · 一枚黑白水滴图标，点击弹出简易折线图；
 /// · 默认显示全部水质参数的曲线（一参数一颜色），下拉框可只看单个参数；
-/// · 数据每秒从当前飞行器的水质 FactGroup 采一次，最多保留 10 分钟（内存里滚动，
-///   不落盘，所以重启软件后重新累积）；
+/// · 只做“实时观测”：每 5 秒采一个点，只在内存里滚动保留最近 20 分钟，
+///   不写任何文件、不做任何保存（数据保存走任务流程）；
 /// · “剔除极值”勾选框：极大值 / 极小值不参与显示。
 ///
 /// 由 FlyViewCustomLayer 实例化，放在 QGC 自定义叠加层里。
@@ -19,6 +19,8 @@ Item {
 
     /// 上层传下来的可用区域（已扣掉工具栏、虚拟摇杆、画中画视频等占位）
     property var parentToolInsets
+    /// 摄像头小窗（FlyView.qml 的 PipView，缩到最小即“图标”）。卡片紧贴它顶部上方，随它缩放/移动。
+    property var pipView
 
     readonly property var _activeVehicle: QGroundControl.multiVehicleManager.activeVehicle
     readonly property var _waterQuality:  _activeVehicle ? _activeVehicle.waterQuality : null
@@ -27,15 +29,33 @@ Item {
     /// 图标连同外边距占用的空间，回报给上层 inset，避免盖住地图上的其它控件
     readonly property real reservedWidth:  _iconSize + _margin * 2
     readonly property real reservedHeight: _iconSize + _margin * 2
+    /// 从左下角算起、到水滴图标顶部的高度（供上层在其上方再叠加采样按钮）
+    readonly property real reservedAboveIconHeight: _margin + _bottomInset + _iconSize + _margin
 
     readonly property real _leftInset:   (parentToolInsets && parentToolInsets.leftEdgeBottomInset) ? parentToolInsets.leftEdgeBottomInset : 0
     readonly property real _bottomInset: (parentToolInsets && parentToolInsets.bottomEdgeLeftInset) ? parentToolInsets.bottomEdgeLeftInset : 0
 
+    /// 摄像头是否在显示（主画面有源）。有源时卡片列紧贴小窗顶部，无源时落到屏幕左下角。
+    readonly property bool _camActive: QGroundControl.videoManager.isStreamSource
+                                        || QGroundControl.videoManager.isUvc
+    /// 卡片边长：随摄像头小窗宽度联动（两卡片严格一致），封顶防单边过大
+    readonly property real _cardSize:  (_camActive && pipView)
+                                       ? Math.min(pipView.width * 0.28, ScreenTools.defaultFontPixelHeight * 1.9)
+                                       : ScreenTools.defaultFontPixelHeight * 1.7
+    /// 卡片间距 / 两卡竖排总高 / 卡片左缘（贴齐小窗左缘）/ 卡片列顶部（紧贴小窗顶）
+    readonly property real _spacing:    ScreenTools.defaultFontPixelWidth * 0.25
+    readonly property real _rowHeight:  control._cardSize * 2 + control._spacing
+    readonly property real _iconX:      pipView ? pipView.x : control._margin
+    readonly property real _iconsTopY:  control._camActive
+                                        ? (pipView.y - control._rowHeight - control._spacing)
+                                        : (parent.height - control._rowHeight - control._margin - control._bottomInset)
+
     readonly property real _margin:   ScreenTools.defaultFontPixelWidth * 0.75
     readonly property real _iconSize: ScreenTools.defaultFontPixelHeight * 1.7
 
-    /// 每秒 1 个采样点，600 个点约 10 分钟
-    readonly property int _maxSamples: 600
+    /// 5 秒一个采样点；240 个点约 20 分钟，只在内存里滚动，不落盘
+    readonly property int _sampleIntervalMs: 5000
+    readonly property int _maxSamples:       240
 
     /// 七个水质参数：key 必须与 VehicleWaterQualityFactGroup 的属性名一致
     readonly property var _parameterDefs: [
@@ -107,7 +127,7 @@ Item {
     }
 
     Timer {
-        interval:         1000
+        interval:         control._sampleIntervalMs
         repeat:           true
         running:          control._waterQuality !== null
         triggeredOnStart: true
@@ -117,16 +137,15 @@ Item {
     Rectangle {
         id: iconButton
 
-        anchors.left:         parent.left
-        anchors.bottom:       parent.bottom
-        anchors.leftMargin:   control._margin + control._leftInset
-        anchors.bottomMargin: control._margin + control._bottomInset
-        width:                control._iconSize
-        height:               control._iconSize
-        radius:               width / 2
-        color:                Qt.rgba(0, 0, 0, 0.6)
-        border.color:         Qt.rgba(1, 1, 1, iconMouseArea.containsMouse ? 0.75 : 0.35)
-        border.width:         1
+        // 方形卡片（与摄像头小窗同风格）：与采样卡片一竖排，水质在下方、紧贴摄像头小窗顶部
+        x:              control._iconX
+        y:              control._iconsTopY + control._cardSize + control._spacing
+        width:           control._cardSize
+        height:          control._cardSize
+        radius:          ScreenTools.defaultBorderRadius
+        color:           Qt.rgba(0, 0, 0, 0.6)
+        border.color:    Qt.rgba(1, 1, 1, iconMouseArea.containsMouse ? 0.75 : 0.35)
+        border.width:    1
 
         QGCColoredImage {
             anchors.centerIn: parent
@@ -220,7 +239,14 @@ Item {
                     onToggled: control._filterExtremes = checked
                 }
 
-                Item { Layout.fillWidth: true }
+                QGCLabel {
+                    Layout.fillWidth:   true
+                    Layout.leftMargin:  Math.round(control._margin * 0.5)
+                    text:               qsTr("Live view only, nothing is saved")
+                    color:              Qt.rgba(1, 1, 1, 0.7)
+                    font.pointSize:     ScreenTools.defaultFontPointSize * 0.8
+                    elide:              Text.ElideRight
+                }
 
                 QGCButton {
                     text:      qsTr("Clear")

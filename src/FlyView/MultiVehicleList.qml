@@ -114,6 +114,8 @@ Item {
         property real _cacheBuffer:     height * 2
 
         delegate: Rectangle {
+            id:             vehicleCard
+
             width:          vehicleList.width
             height:         innerColumn.height + _margin * 2
             color:          QGroundControl.multiVehicleManager.activeVehicle == _vehicle ? _activeVehicleColor : qgcPal.button
@@ -198,7 +200,9 @@ Item {
 
                     TelemetryValuesBar {
                         id:                     control
-                        specificVehicleForCard: _vehicle
+                        // 必须用 vehicleCard 限定：TelemetryValuesBar 自己也有一个同名属性 _vehicle，
+                        // 不加限定会解析成它自己的 _vehicle，形成“自绑自己”的绑定循环
+                        specificVehicleForCard: vehicleCard._vehicle
                     }
                 }
             }

@@ -177,16 +177,20 @@ QString getSDCardPath()
     return result.toString();
 }
 
-void openFileImportDialog(const QString& destPath, std::function<void(const QString&)> callback)
+void openFileImportDialog(const QString& destPath, const QStringList& allowedExtensions,
+                          std::function<void(const QString&)> callback)
 {
     s_importCallback = std::move(callback);
 
-    const QJniObject jDestPath = QJniObject::fromString(destPath);
+    // 扩展名用逗号连成一个字符串传过去，Java 侧再 split —— 比走 JNI 字符串数组简单得多。
+    const QJniObject jDestPath   = QJniObject::fromString(destPath);
+    const QJniObject jExtensions = QJniObject::fromString(allowedExtensions.join(QLatin1Char(',')));
     QJniObject::callStaticMethod<void>(
         kJniQGCActivityClassName,
         "openFileImportDialog",
-        "(Ljava/lang/String;)V",
-        jDestPath.object<jstring>());
+        "(Ljava/lang/String;Ljava/lang/String;)V",
+        jDestPath.object<jstring>(),
+        jExtensions.object<jstring>());
 
     QJniEnvironment env;
     if (env.checkAndClearExceptions()) {

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 水质采样杆入口图标：单色滴管造型，靠 QGCColoredImage 按 alpha 蒙版染色 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- 管身 -->
+  <path fill="#ffffff" d="M10.2 3.2h3.6v14.1a1.8 1.8 0 0 1-3.6 0z"/>
+  <!-- 顶部活塞帽 -->
+  <path fill="#ffffff" d="M9.2 1h5.6v2.4H9.2z"/>
+  <!-- 底部取样水滴 -->
+  <path fill="#ffffff" d="M12 17.6c-.2 0-3.4 3.3-3.4 5a3.4 3.4 0 0 0 6.8 0c0-1.7-3.2-5-3.4-5z"/>
+</svg>

@@ -228,7 +228,8 @@ Item {
 
                     onClicked: {
                         _root._importPending = true
-                        QGCFileDialogController.importFromNativePicker()
+                        // 目标目录用 folder 本身：导入后就落在同一个目录里，列表刷新后能直接看到
+                        QGCFileDialogController.importFromNativePicker(_root.folder, _rgExtensions)
                     }
                 }
             }

@@ -4,38 +4,74 @@
     "QGC.MetaData.Facts": [
         {
             "name": "videoSource",
-            "shortDesc": "Source for video stream (UDP, TCP, RTSP, or connected USB camera).",
-            "longDesc": "Source for video. UDP, TCP, RTSP and UVC Cameras may be supported depending on Vehicle and ground station version.",
+            "shortDesc": "视频源类型（RTSP / UDP / TCP / USB 相机）",
+            "longDesc": "第一个摄像头的视频源类型。选 Disabled 表示不使用；选其它类型后填写对应地址。",
             "type": "string",
             "default": "",
-            "label": "Source",
+            "label": "视频一来源",
             "keywords": "video source,camera,stream"
         },
         {
+            "name": "videoSource2",
+            "shortDesc": "视频源类型（RTSP / UDP / TCP / USB 相机）",
+            "longDesc": "第二个摄像头的视频源类型。选 Disabled 表示不使用摄像头2；选其它类型后填写对应地址。",
+            "type": "string",
+            "default": "Video Stream Disabled",
+            "label": "视频二来源",
+            "keywords": "video source,camera2,second camera,stream"
+        },
+        {
             "name": "udpUrl",
-            "shortDesc": "Network address and port for UDP video stream (e.g. 0.0.0.0:5600).",
-            "longDesc": "UDP url address and port to bind to for video stream. Example: 0.0.0.0:5600",
+            "shortDesc": "第一个摄像头的 UDP 视频流地址",
+            "longDesc": "第一个摄像头的 UDP 地址与端口。示例：0.0.0.0:5600",
             "type": "string",
             "default": "0.0.0.0:5600",
-            "label": "UDP URL",
+            "label": "摄像头1 UDP 地址",
             "keywords": "udp,mpegts,video url,stream url"
         },
         {
             "name": "rtspUrl",
-            "shortDesc": "Network address for RTSP video stream (e.g. rtsp://192.168.42.1:554/live).",
-            "longDesc": "RTSP url address and port to bind to for video stream. Example: rtsp://192.168.42.1:554/live",
+            "shortDesc": "RTSP 视频流地址",
+            "longDesc": "RTSP 视频流地址与端口。示例：rtsp://192.168.42.1:554/live",
             "type": "string",
             "default": "",
-            "label": "RTSP URL",
+            "label": "摄像头1 地址",
             "keywords": "rtsp,video url,stream url"
         },
         {
-            "name": "tcpUrl",
-            "shortDesc": "Network address and port for TCP video stream (e.g. 192.168.143.200:3001).",
-            "longDesc": "TCP url address and port to bind to for video stream. Example: 192.168.143.200:3001",
+            "name": "rtspUrl2",
+            "shortDesc": "摄像头2 的 RTSP 视频流地址",
+            "longDesc": "第二个摄像头（辅画面）的 RTSP 视频流地址。需先选视频二来源为 RTSP。示例：rtsp://192.168.42.2:554/live",
             "type": "string",
             "default": "",
-            "label": "TCP URL",
+            "label": "摄像头2 RTSP 地址",
+            "keywords": "rtsp,camera2,second camera,video url,stream url"
+        },
+        {
+            "name": "udpUrl2",
+            "shortDesc": "摄像头2 的 UDP 视频流地址",
+            "longDesc": "第二个摄像头的 UDP 地址与端口（用于 UDP h.264 / h.265 / MPEG-TS）。示例：0.0.0.0:5600",
+            "type": "string",
+            "default": "",
+            "label": "摄像头2 UDP 地址",
+            "keywords": "udp,camera2,video url,stream url"
+        },
+        {
+            "name": "tcpUrl2",
+            "shortDesc": "摄像头2 的 TCP 视频流地址",
+            "longDesc": "第二个摄像头的 TCP 地址与端口。示例：192.168.143.200:3001",
+            "type": "string",
+            "default": "",
+            "label": "摄像头2 TCP 地址",
+            "keywords": "tcp,camera2,video url,stream url"
+        },
+        {
+            "name": "tcpUrl",
+            "shortDesc": "第一个摄像头的 TCP 视频流地址",
+            "longDesc": "第一个摄像头的 TCP 地址与端口。示例：192.168.143.200:3001",
+            "type": "string",
+            "default": "",
+            "label": "摄像头1 TCP 地址",
             "keywords": "tcp,video url,stream url"
         },
         {

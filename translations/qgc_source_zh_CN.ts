@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="zh-CN" sourcelanguage="en">
   <context>
@@ -4534,30 +4534,6 @@ Click Ok to start the auto-tuning process.
 点击“确定”开始自动调参过程。
 </translation>
     </message>
-    <message>
-      <source>WARNING!
-
-The auto-tuning procedure should be executed with caution and requires the vehicle to fly stable enough before attempting the procedure!
-
-Before starting the auto-tuning process, make sure that:
-1. You have read the auto-tuning guide and have followed the preliminary steps
-2. The current control gains are good enough to stabilize the drone in presence of medium disturbances
-3. You are ready to abort the auto-tuning sequence by moving the RC sticks, if anything unexpected happens.
-
-Click Ok to start the auto-tuning process.
-</source>
-      <translation>警告！
-
-自动调参过程需谨慎执行，且要求飞行器在尝试前已具备足够的飞行稳定性！
-
-开始自动调参前，请确认：
-1. 您已阅读自动调参指南并完成准备工作
-2. 当前控制增益足以在中等扰动下稳定机体
-3. 若出现意外，您能随时通过拨动遥控器摇杆中止调参过程。
-
-点击“确定”开始自动调参。
-</translation>
-    </message>
   </context>
   <context>
     <name>AxisMonitor</name>
@@ -7760,6 +7736,10 @@ VTOL</source>
       <location filename="../src/FlyView/FlyViewVideo.qml" line="51"/>
       <source>Double-click to exit full screen</source>
       <translation>双击退出全屏</translation>
+    </message>
+    <message>
+      <source>Camera 2</source>
+      <translation>摄像头2</translation>
     </message>
   </context>
   <context>
@@ -24467,6 +24447,160 @@ If a vehicle still has this key configured, you will no longer be able to commun
     </message>
   </context>
   <context>
+    <name>WaterSamplingButton</name>
+    <message>
+      <source>Sample</source>
+      <translation>采样</translation>
+    </message>
+    <message>
+      <source>Sampling</source>
+      <translation>采样中</translation>
+    </message>
+  </context>
+  <context>
+    <name>WaterSamplingControl</name>
+    <message>
+      <source>Water Sampling</source>
+      <translation>水质采样</translation>
+    </message>
+    <message>
+      <source>Bottle</source>
+      <translation>瓶子</translation>
+    </message>
+    <message>
+      <source>Capacity</source>
+      <translation>容量</translation>
+    </message>
+    <message>
+      <source>500 ml</source>
+      <translation>500 毫升</translation>
+    </message>
+    <message>
+      <source>1 L</source>
+      <translation>1 升</translation>
+    </message>
+    <message>
+      <source>1.5 L</source>
+      <translation>1.5 升</translation>
+    </message>
+    <message>
+      <source>2 L</source>
+      <translation>2 升</translation>
+    </message>
+    <message>
+      <source>Estimated pump time: %1 s</source>
+      <translation>预计抽水时间：%1 秒</translation>
+    </message>
+    <message>
+      <source>Start Sampling</source>
+      <translation>开始采样</translation>
+    </message>
+    <message>
+      <source>Stop Sampling</source>
+      <translation>停止采样</translation>
+    </message>
+    <message>
+      <source>Workflow</source>
+      <translation>采样流程</translation>
+    </message>
+    <message>
+      <source>Lowering sampling rod</source>
+      <translation>放下采样杆</translation>
+    </message>
+    <message>
+      <source>Switching valve channel</source>
+      <translation>开启电磁阀通道</translation>
+    </message>
+    <message>
+      <source>Pumping water</source>
+      <translation>水泵正转抽水</translation>
+    </message>
+    <message>
+      <source>Stopping pump</source>
+      <translation>停止水泵</translation>
+    </message>
+    <message>
+      <source>Waiting</source>
+      <translation>延时等待 3 秒</translation>
+    </message>
+    <message>
+      <source>Retracting sampling rod</source>
+      <translation>收回采样杆</translation>
+    </message>
+    <message>
+      <source>Sampling finished</source>
+      <translation>采样完成</translation>
+    </message>
+    <message>
+      <source>Sampling Finished</source>
+      <translation>采样完成</translation>
+    </message>
+    <message>
+      <source>Progress: %1%  ·  %2 s remaining</source>
+      <translation>进度：%1% · 剩余 %2 秒</translation>
+    </message>
+    <message>
+      <source>%1 s</source>
+      <translation>%1 秒</translation>
+    </message>
+    <message>
+      <source>Sampling in progress</source>
+      <translation>采样进行中…</translation>
+    </message>
+    <message>
+      <source>Firmware refused the servo command: set the corresponding SERVOn_FUNCTION to 0 (Disabled)</source>
+      <translation>飞控拒绝了舵机命令：请把对应的 SERVOn_FUNCTION 设为 0（Disabled）</translation>
+    </message>
+    <message>
+      <source>Firmware does not support DO_SET_SERVO: firmware version mismatch</source>
+      <translation>固件不支持 DO_SET_SERVO 命令：固件版本不匹配</translation>
+    </message>
+    <message>
+      <source>Firmware has COMMAND_LONG disabled, please resend with COMMAND_INT</source>
+      <translation>固件已禁用 COMMAND_LONG，请改用 COMMAND_INT 重发</translation>
+    </message>
+    <message>
+      <source>Bottle selected</source>
+      <translation>已选瓶</translation>
+    </message>
+    <message>
+      <source>Progress: %1%</source>
+      <translation>进度：%1%</translation>
+    </message>
+    <message>
+      <source>Pumping: %1 s / %2 s</source>
+      <translation>抽水中：%1 秒 / %2 秒</translation>
+    </message>
+    <message>
+      <source>Firmware reports no water sampling pipeline (WS_BOTTLE_CHAN missing).</source>
+      <translation>固件未报告完整采样流程（缺少 WS_BOTTLE_CHAN）。</translation>
+    </message>
+    <message>
+      <source>Water sampling is disabled on the firmware (WS_ENABLE = 0).</source>
+      <translation>固件端未启用采样（WS_ENABLE = 0）。</translation>
+    </message>
+    <message>
+      <source>WS_VALVE_ENABLE = 0: both bottles may fill the same bottle.</source>
+      <translation>WS_VALVE_ENABLE = 0：两个瓶可能进同一个瓶。</translation>
+    </message>
+    <message>
+      <source>A sampling command sequence is still in progress.</source>
+      <translation>采样命令序列仍在发送中。</translation>
+    </message>
+    <message>
+      <source>No vehicle connected.</source>
+      <translation>未连接载具。</translation>
+    </message>
+    <message>
+      <source>Selected volume exceeds the vehicle limit (%1 ml).</source>
+      <translation>所选容量超过载具上限（%1 毫升）。</translation>
+    </message>
+    <message>
+      <source>The vehicle did not report sampling completion in time.</source>
+      <translation>飞控未能及时回报采样完成，界面已自动解锁。</translation>
+    </message>
+  </context>
+  <context>
     <name>WaterQualityLiveChart</name>
     <message>
       <source>Waiting for telemetry</source>
@@ -24593,6 +24727,10 @@ If a vehicle still has this key configured, you will no longer be able to commun
     <message>
       <source>Clear</source>
       <translation>清空</translation>
+    </message>
+    <message>
+      <source>Live view only, nothing is saved</source>
+      <translation>仅实时显示，不保存数据</translation>
     </message>
   </context>
 </TS>

@@ -1,5 +1,6 @@
 package org.mavlink.qgroundcontrol;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -66,6 +67,55 @@ public class QGCActivityTest {
         // ".plan" must be the suffix, not just appear somewhere in the name.
         assertFalse(QGCActivity.isValidImportFileName("plan.kml"));
         assertFalse(QGCActivity.isValidImportFileName("mission.plan.bak"));
+    }
+
+    // -----------------------------------------------------------------------
+    // parseImportExtensions / isValidImportFileName with explicit extensions
+    // (covers the caller-supplied whitelist used by the water quality import)
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void parseImportExtensions_acceptsStarDotSpelling() {
+        assertArrayEquals(new String[] { ".xlsx", ".csv" },
+                QGCActivity.parseImportExtensions("*.xlsx,*.csv"));
+    }
+
+    @Test
+    public void parseImportExtensions_acceptsBareAndDottedSpelling() {
+        assertArrayEquals(new String[] { ".xlsx", ".csv", ".txt" },
+                QGCActivity.parseImportExtensions(".xlsx, csv , .txt"));
+    }
+
+    @Test
+    public void parseImportExtensions_fallsBackToPlanWhenEmpty() {
+        assertArrayEquals(new String[] { ".plan" }, QGCActivity.parseImportExtensions(""));
+        assertArrayEquals(new String[] { ".plan" }, QGCActivity.parseImportExtensions(null));
+        assertArrayEquals(new String[] { ".plan" }, QGCActivity.parseImportExtensions("   "));
+        assertArrayEquals(new String[] { ".plan" }, QGCActivity.parseImportExtensions("*"));
+    }
+
+    @Test
+    public void isValidImportFileNameWithExtensions_acceptsXlsxCaseInsensitively() {
+        final String[] extensions = new String[] { ".xlsx", ".csv" };
+        assertTrue(QGCActivity.isValidImportFileName("water_quality.xlsx", extensions));
+        assertTrue(QGCActivity.isValidImportFileName("WATER_QUALITY.XLSX", extensions));
+        assertTrue(QGCActivity.isValidImportFileName("采样数据.csv", extensions));
+    }
+
+    @Test
+    public void isValidImportFileNameWithExtensions_rejectsOtherTypes() {
+        final String[] extensions = new String[] { ".xlsx", ".csv" };
+        assertFalse(QGCActivity.isValidImportFileName("mission.plan", extensions));
+        assertFalse(QGCActivity.isValidImportFileName("data.xls", extensions));
+        assertFalse(QGCActivity.isValidImportFileName("data.xlsx.bak", extensions));
+        assertFalse(QGCActivity.isValidImportFileName("xlsx", extensions));
+    }
+
+    @Test
+    public void isValidImportFileNameWithExtensions_rejectsEmptyAllowList() {
+        // 空白名单必须全部拒绝，不能退化成“放行一切”
+        assertFalse(QGCActivity.isValidImportFileName("anything.xlsx", new String[0]));
+        assertFalse(QGCActivity.isValidImportFileName("anything.xlsx", null));
     }
 
     // -----------------------------------------------------------------------

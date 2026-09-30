@@ -78,6 +78,7 @@ qt_add_qml_module(FlyViewModule
         VTOLChecklist.qml
         WaterQualityLiveChart.qml
         WaterQualityOverlay.qml
+        WaterSamplingControl.qml
     NO_PLUGIN
 )
 
@@ -97,4 +98,6 @@ qt_add_resources(FlyViewModule flyview_qmlimages
     FILES
         "${CMAKE_SOURCE_DIR}/resources/check.svg"
         "${CMAKE_SOURCE_DIR}/resources/WaterQualityDropIcon.svg"
+        "${CMAKE_SOURCE_DIR}/resources/WaterSamplingIcon.svg"
+        "${CMAKE_SOURCE_DIR}/resources/SampleBottleIcon.svg"
 )

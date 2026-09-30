@@ -350,9 +350,18 @@ AnalyzePage {
 
             // ---------------- 视图类型 + 参数选择 + 时间范围 ----------------
             // 没有数据时也保留视图类型按钮，空坐标系同样能切换折线图 / 地图
-            RowLayout {
+            //
+            // 这里必须用 Flow 而不是 RowLayout：本行控件太多，遥控器这类窄屏下总宽必然超屏，
+            // 而 RowLayout 不会压缩带 preferredWidth 的项，只会把它们挤出边界（图标和时间范围
+            // 被截断）。Flow 在宽度不够时自动折到下一行，宽屏仍是一行 —— 电脑和遥控器都能完整显示。
+            //
+            // 注意：Flow 是 Positioner，它的子项**不支持 Layout.* 附加属性**，宽度要直接写 width。
+            // Flow 也不做垂直对齐，所以文本类子项统一给一个和按钮等高（x2 字高）的 height 再居中，
+            // 否则折行后各行的文字会参差不齐。
+            Flow {
                 Layout.fillWidth: true
                 spacing:          ScreenTools.defaultFontPixelWidth
+                flow:             Flow.LeftToRight
 
                 QGCRadioButton {
                     id:      lineRadio
@@ -360,6 +369,7 @@ AnalyzePage {
                     checked: page._lineMode
                     onClicked: page._lineMode = true
                 }
+
                 QGCRadioButton {
                     text:    qsTr("Map Heat Path")
                     checked: !page._lineMode
@@ -367,23 +377,25 @@ AnalyzePage {
                 }
 
                 Rectangle {
-                    Layout.preferredWidth:  1
-                    Layout.fillHeight:      true
-                    color:                  qgcPal.text
-                    opacity:                0.3
-                    visible:                waterLog.loaded
-                }
-
-                QGCLabel {
-                    text:       qsTr("Parameter:")
+                    width:      1
+                    height:     ScreenTools.defaultFontPixelHeight * 2
+                    color:      qgcPal.text
+                    opacity:    0.3
                     visible:    waterLog.loaded
                 }
 
+                QGCLabel {
+                    text:               qsTr("Parameter:")
+                    visible:            waterLog.loaded
+                    height:             ScreenTools.defaultFontPixelHeight * 2
+                    verticalAlignment:  Text.AlignVCenter
+                }
+
                 QGCComboBox {
-                    id:                 lineParameterCombo
-                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 12
-                    visible:            waterLog.loaded && page._lineMode
-                    model:              page._parameterDisplayNames
+                    id:         lineParameterCombo
+                    width:      ScreenTools.defaultFontPixelWidth * 12
+                    visible:    waterLog.loaded && page._lineMode
+                    model:      page._parameterDisplayNames
                     // 用户改选后 page 会刷新图表；这里不用绑定 currentIndex，
                     // 导入新文件时由 parameterSelectionSyncRequested 统一同步。
                     // 模型是本地化显示名，回传时必须换算回规范名（内部标识符）
@@ -391,22 +403,25 @@ AnalyzePage {
                 }
 
                 QGCComboBox {
-                    id:                 mapParameterCombo
-                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 12
-                    visible:            waterLog.loaded && !page._lineMode
-                    model:              page._parameterDisplayNames
+                    id:         mapParameterCombo
+                    width:      ScreenTools.defaultFontPixelWidth * 12
+                    visible:    waterLog.loaded && !page._lineMode
+                    model:      page._parameterDisplayNames
                     onActivated: (index) => page.selectMapParameter(waterLog.parameterNames[index])
                 }
 
                 QGCLabel {
-                    text:       qsTr("Time range:")
-                    visible:    waterLog.loaded
+                    text:               qsTr("Time range:")
+                    visible:            waterLog.loaded
+                    height:             ScreenTools.defaultFontPixelHeight * 2
+                    verticalAlignment:  Text.AlignVCenter
                 }
 
                 QGCTextField {
-                    id:                     startField
-                    Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
-                    visible:                waterLog.loaded
+                    id:         startField
+                    width:      ScreenTools.defaultFontPixelWidth * 10
+                    visible:    waterLog.loaded
+
                     onEditingFinished: {
                         const seconds = page.textToSeconds(text)
                         if (page.isValidStartTime(seconds)) {
@@ -420,14 +435,17 @@ AnalyzePage {
                 }
 
                 QGCLabel {
-                    text:       qsTr("to")
-                    visible:    waterLog.loaded
+                    text:               qsTr("to")
+                    visible:            waterLog.loaded
+                    height:             ScreenTools.defaultFontPixelHeight * 2
+                    verticalAlignment:  Text.AlignVCenter
                 }
 
                 QGCTextField {
-                    id:                     endField
-                    Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 10
-                    visible:                waterLog.loaded
+                    id:         endField
+                    width:      ScreenTools.defaultFontPixelWidth * 10
+                    visible:    waterLog.loaded
+
                     onEditingFinished: {
                         const seconds = page.textToSeconds(text)
                         if (page.isValidEndTime(seconds)) {
@@ -465,11 +483,11 @@ AnalyzePage {
                 }
 
                 QGCLabel {
-                    text:    qsTr("%1 removed").arg(waterLog.excludedSampleCount)
-                    visible: waterLog.loaded && (waterLog.excludedSampleCount > 0)
+                    text:               qsTr("%1 removed").arg(waterLog.excludedSampleCount)
+                    visible:            waterLog.loaded && (waterLog.excludedSampleCount > 0)
+                    height:             ScreenTools.defaultFontPixelHeight * 2
+                    verticalAlignment:  Text.AlignVCenter
                 }
-
-                Item { Layout.fillWidth: true }
             }
 
             // ---------------- 图表本体 ----------------

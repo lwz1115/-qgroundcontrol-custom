@@ -265,7 +265,20 @@ void GstVideoReceiver::start(uint32_t timeout)
             gst_clear_object(&decoderQueue);
             gst_clear_object(&_tee);
             gst_clear_object(&_source);
+        } else {
+            // Once the elements are in _pipeline they are owned by it and died with it above, so they
+            // must not be cleared again — but the members still have to be nulled. Left dangling they
+            // are dereferenced by the very next stop()/reconnect (gst_element_get_static_pad(_tee, ...)),
+            // which is a use-after-free and surfaces as an unhandled SEH 0xC0000005.
+            _recorderValve = nullptr;
+            _decoderValve = nullptr;
+            _tee = nullptr;
+            _source = nullptr;
         }
+
+        // The probe lived on the sink pad of the tee that was just destroyed; leaving the id set makes
+        // stop() look that freed pad up again on the reconnect path.
+        _teeProbeId = 0;
 
         emit onStartComplete(STATUS_FAIL);
     } else {

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 水质采样瓶图标：单色描边瓶身（中间透明，方便在瓶身上叠加 1/2 号数字） -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 瓶盖 -->
+  <rect x="9" y="2" width="6" height="2" rx="0.5"/>
+  <!-- 瓶颈 -->
+  <path d="M10 4h4v3"/>
+  <!-- 瓶身 -->
+  <path d="M7.5 7h9v11.5a2.5 2.5 0 0 1-2.5 2.5h-4a2.5 2.5 0 0 1-2.5-2.5z"/>
+</svg>

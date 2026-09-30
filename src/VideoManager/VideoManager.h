@@ -4,6 +4,7 @@
 #include <chrono>
 
 #include <QtCore/QFuture>
+#include <QtCore/QHash>
 #include <QtCore/QMutex>
 #include <QtCore/QPromise>
 #include <QtCore/QObject>
@@ -126,6 +127,8 @@ private:
     static void _cleanupOldVideos();
 
     QList<VideoReceiver*> _videoReceivers;
+    // Consecutive start failures per stream; reaching 3 gives up until the URI changes.
+    QHash<VideoReceiver*, int> _startFailureCounts;
     SubtitleWriter *_subtitleWriter = nullptr;
     VideoSettings *_videoSettings = nullptr;
     QQuickWindow *_mainWindow = nullptr;

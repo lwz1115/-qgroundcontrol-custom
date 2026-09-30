@@ -25,6 +25,8 @@ public class QGCActivity extends QtActivity {
 
     private static final int IMPORT_FILE_REQUEST_CODE = 42;
     private static String s_importDestPath = "";
+    /** 逗号分隔的允许扩展名，来自 Qt 侧的 nameFilters；空表示用默认的 .plan */
+    private static String s_importExtensions = "";
 
     private WifiManager.MulticastLock m_wifiMulticastLock;
     private volatile QGCStoragePermissionController m_storagePermissionController;
@@ -87,7 +89,7 @@ public class QGCActivity extends QtActivity {
             if (resultCode == Activity.RESULT_OK && data != null) {
                 final Uri uri = data.getData();
                 if (uri != null) {
-                    final String importedPath = copyFileToDestination(uri, s_importDestPath);
+                    final String importedPath = copyFileToDestination(uri, s_importDestPath, s_importExtensions);
                     onImportResult(importedPath != null ? importedPath : "");
                 } else {
                     QGCLogger.w(TAG, "onActivityResult: null URI for file import");
@@ -140,7 +142,7 @@ public class QGCActivity extends QtActivity {
      * @param destDir Fully-qualified path of the destination directory.
      * @return Fully-qualified path of the copied file, or null on failure.
      */
-    private String copyFileToDestination(final Uri uri, final String destDir) {
+    private String copyFileToDestination(final Uri uri, final String destDir, final String extensions) {
         String displayName = "";
         try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {
@@ -164,8 +166,8 @@ public class QGCActivity extends QtActivity {
             return null;
         }
 
-        if (!isValidImportFileName(displayName)) {
-            QGCLogger.w(TAG, "Rejected non-.plan file: " + displayName);
+        if (!isValidImportFileName(displayName, parseImportExtensions(extensions))) {
+            QGCLogger.w(TAG, "Rejected file with disallowed extension: " + displayName);
             return null;
         }
 
@@ -231,15 +233,64 @@ public class QGCActivity extends QtActivity {
         throw new IllegalStateException("resolveDestFile: no free filename found under " + destDir);
     }
 
+    /** Extensions accepted when the caller does not specify any (mission import). */
+    private static final String[] DEFAULT_IMPORT_EXTENSIONS = new String[] { ".plan" };
+
+    /**
+     * Splits the comma separated extension list handed over from Qt, e.g. "*.xlsx,*.csv".
+     * Accepts both "*.xlsx" and ".xlsx" / "xlsx" spellings.
+     * Returns the default (.plan) when nothing usable was provided, so the mission import
+     * path keeps its previous behaviour.
+     */
+    static String[] parseImportExtensions(final String extensions) {
+        if (extensions == null || extensions.trim().isEmpty()) {
+            return DEFAULT_IMPORT_EXTENSIONS;
+        }
+        final java.util.List<String> cleaned = new java.util.ArrayList<>();
+        for (final String rawPart : extensions.split(",")) {
+            String extension = rawPart.trim();
+            if (extension.startsWith("*")) {
+                extension = extension.substring(1);   // "*.xlsx" -> ".xlsx"
+            }
+            if (extension.isEmpty()) {
+                continue;
+            }
+            if (!extension.startsWith(".")) {
+                extension = "." + extension;
+            }
+            cleaned.add(extension);
+        }
+        return cleaned.isEmpty() ? DEFAULT_IMPORT_EXTENSIONS : cleaned.toArray(new String[0]);
+    }
+
     /**
      * Returns true when is a valid mission-file name that may be imported.
      * A valid name is non-null, non-empty, and ends with the .plan extension
      */
     public static boolean isValidImportFileName(final String displayName) {
+        return isValidImportFileName(displayName, DEFAULT_IMPORT_EXTENSIONS);
+    }
+
+    /**
+     * Returns true when displayName ends with one of allowedExtensions (case-insensitive).
+     * Used by copyFileToDestination to gate which files the picker result may import;
+     * the accepted set comes from the caller's nameFilters.
+     */
+    public static boolean isValidImportFileName(final String displayName, final String[] allowedExtensions) {
         if (displayName == null || displayName.isEmpty()) {
             return false;
         }
-        return displayName.toLowerCase(java.util.Locale.ROOT).endsWith(".plan");
+        if (allowedExtensions == null || allowedExtensions.length == 0) {
+            return false;
+        }
+        final String lowerName = displayName.toLowerCase(java.util.Locale.ROOT);
+        for (final String extension : allowedExtensions) {
+            if (extension != null && !extension.isEmpty()
+                    && lowerName.endsWith(extension.toLowerCase(java.util.Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static String getSDCardPath() {
@@ -279,15 +330,20 @@ public class QGCActivity extends QtActivity {
      *
      * @param destPath Fully-qualified path of the destination Missions directory.
      */
-    public static void openFileImportDialog(final String destPath) {
+    public static void openFileImportDialog(final String destPath, final String extensions) {
         if (m_instance == null) {
             QGCLogger.e(TAG, "Activity instance is null");
             return;
         }
         s_importDestPath = (destPath != null) ? destPath : "";
+        s_importExtensions = (extensions != null) ? extensions : "";
         m_instance.runOnUiThread(() -> {
             final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
+            // 固定用 */*：ACTION_OPEN_DOCUMENT 按 MIME 过滤会误伤 .xlsx —— 各机型/文件管理器
+            // 对 xlsx 的 MIME 映射不一致（application/vnd.ms-excel vs
+            // ...spreadsheetml.sheet），按 MIME 过滤会让文件变灰选不中。
+            // 扩展名改由 copyFileToDestination 用调用方给的白名单校验。
             intent.setType("*/*");
             m_instance.startActivityForResult(intent, IMPORT_FILE_REQUEST_CODE);
         });
