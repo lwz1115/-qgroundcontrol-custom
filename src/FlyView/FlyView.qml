@@ -160,7 +160,8 @@ Item {
             parentToolInsets:   widgetLayer.totalToolInsets
             mapControl:         _mapControl
             pipView:            _pipView
-            visible:            !QGroundControl.videoManager.fullScreen
+            // 视频全屏时左下角的小窗变成了地图小窗，图标仍贴它顶部，所以全屏也显示
+            visible:            true
         }
 
         // Development tool for visualizing the insets for a paticular layer, show if needed

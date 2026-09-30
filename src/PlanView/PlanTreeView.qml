@@ -200,8 +200,15 @@ TreeView {
 
     delegate: Item {
         id: delegateRoot
+        // 无人船不需要 电子围栏 / 集合点 / 变换：这三个分组整组隐藏（visible=false + 高度 0）
+        readonly property bool _hiddenGroup: nodeType === "fenceGroup"
+                                             || nodeType === "rallyGroup"
+                                             || nodeType === "transformGroup"
+        visible: !_hiddenGroup
         implicitWidth: root.width
-        implicitHeight: (loader.item ? loader.item.height : 1) + (separatorLine.visible ? separatorLine.height + root.rowSpacing : 0)
+        implicitHeight: _hiddenGroup
+                        ? 0
+                        : ((loader.item ? loader.item.height : 1) + (separatorLine.visible ? separatorLine.height + root.rowSpacing : 0))
         enabled: !root._createNewPlanMode || _enabledInCreateMode
         opacity: enabled ? 1 : root.editorMap._nonInteractiveOpacity
         width: root.width

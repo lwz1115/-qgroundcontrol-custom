@@ -83,10 +83,12 @@ Rectangle {
             }
         }
 
+        // 无人船用不到航点默认高度：隐藏该字段（设置项保留，只是界面上不显示）
         FactTextFieldSlider {
             Layout.fillWidth: true
             label: qsTr("Waypoints Altitude")
             fact: QGroundControl.settingsManager.appSettings.defaultMissionItemAltitude
+            visible: false
         }
 
         FactTextFieldSlider {

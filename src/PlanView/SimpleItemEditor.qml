@@ -91,49 +91,7 @@ Rectangle {
         anchors.top: parent.top
         spacing: _margin
 
-        // 采样点（仅航点）：整条航线只允许一个
-        ColumnLayout {
-            anchors.left:  parent.left
-            anchors.right: parent.right
-            spacing:       _margin
-            visible:       missionItem.isSimpleItem && !missionItem.isTakeoffItem && missionItem.specifiesCoordinate
-
-            QGCLabel {
-                text:             qsTr("采样设置")
-                font.bold:        true
-                Layout.fillWidth: true
-            }
-
-            QGCCheckBox {
-                id:               samplePointCheckBox
-                text:             qsTr("到达此航点时自动采样")
-                Layout.fillWidth: true
-                onClicked:        _handleSamplePointClick()
-            }
-
-            // 采样停留时间（NAV_WAYPOINT 的 param1）：进任务、上传载具、飞行界面都认得
-            RowLayout {
-                Layout.fillWidth: true
-                spacing:          ScreenTools.defaultFontPixelWidth
-                visible:          samplePointCheckBox.checked
-
-                QGCLabel { text: qsTr("Hold at sample point") }
-
-                FactTextField {
-                    fact:                  missionItem.holdTimeFact
-                    showUnits:             true
-                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
-                }
-            }
-
-            QGCLabel {
-                Layout.fillWidth: true
-                wrapMode:         Text.WordWrap
-                font.pointSize:   ScreenTools.smallFontPointSize
-                text:             qsTr("Only one sample point is allowed per route. Setting a new one moves it away from the current waypoint.")
-                visible:          samplePointCheckBox.checked
-            }
-        }
+        // 采样点（仅航点）：整条航线只允许一个，显示在“采样”页签里
 
         // Takeoff item
         ColumnLayout {
@@ -191,29 +149,38 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: _multipleTabsVisible()
 
-                property bool showBasicItems:    tabBar.visible ? tabBar.currentIndex === 0 : _basicItemsAvailable
-                property bool showCameraItems:   tabBar.visible ? tabBar.currentIndex === 1 : _cameraAvailable
-                property bool showAdvancedItems: tabBar.visible ? tabBar.currentIndex === 2 : _advancedItemsAvailable
+                property bool showSamplingItems:  tabBar.visible ? samplingTab.checked     : _samplingAvailable
+                property bool showBasicItems:     tabBar.visible ? basicItemsTab.checked   : _basicItemsAvailable
+                property bool showCameraItems:    tabBar.visible ? cameraTab.checked       : _cameraAvailable
+                property bool showAdvancedItems:  tabBar.visible ? advancedItemsTab.checked : _advancedItemsAvailable
 
-                property bool _basicItemsAvailable: _specifiesAltitude || missionItem.speedSection.available || missionItem.comboboxFacts.count > 0 || missionItem.textFieldFacts.count > 0 || missionItem.nanFacts.count > 0
+                property bool _samplingAvailable: missionItem.isSimpleItem && !missionItem.isTakeoffItem && missionItem.specifiesCoordinate
+                property bool _basicItemsAvailable: missionItem.speedSection.available
+                                                    || missionItem.comboboxFacts.count > 0
+                                                    || missionItem.textFieldFacts.count > 0
+                                                    || missionItem.nanFacts.count > 0
                 property bool _advancedItemsAvailable: missionItem.comboboxFactsAdvanced.count > 0 || missionItem.textFieldFactsAdvanced.count > 0 || missionItem.nanFactsAdvanced.count > 0
                 property bool _cameraAvailable: missionItem.cameraSection.available
 
                 function _multipleTabsVisible() {
                     let visibleCount = 0
+                    if (_samplingAvailable) visibleCount++
                     if (_basicItemsAvailable) visibleCount++
                     if (_cameraAvailable) visibleCount++
                     if (_advancedItemsAvailable) visibleCount++
                     return visibleCount > 1
                 }
 
+                // 默认点开航点就落在“采样”页
                 Component.onCompleted: {
-                    if (_basicItemsAvailable) {
-                        tabBar.currentIndex = 0
+                    if (_samplingAvailable) {
+                        samplingTab.checked = true
+                    } else if (_basicItemsAvailable) {
+                        basicItemsTab.checked = true
                     } else if (_cameraAvailable) {
-                        tabBar.currentIndex = 1
+                        cameraTab.checked = true
                     } else if (_advancedItemsAvailable) {
-                        tabBar.currentIndex = 2
+                        advancedItemsTab.checked = true
                     } else {
                         tabBar.currentIndex = -1
                     }
@@ -223,6 +190,13 @@ Rectangle {
                     id: basicItemsTab
                     icon.source: "/res/PlanSimpleItemBasic.svg"
                     visible: tabBar._basicItemsAvailable
+                }
+
+                // 采样设置页：相机左边，默认页
+                QGCTabButton {
+                    id: samplingTab
+                    icon.source: "/qmlimages/WaterSamplingIcon.svg"
+                    visible: tabBar._samplingAvailable
                 }
 
                 QGCTabButton {
@@ -238,15 +212,59 @@ Rectangle {
                 }
             }
 
+            // ── 采样设置页内容（默认页）──
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: _fieldSpacing
+                visible: tabBar.showSamplingItems
+
+                QGCLabel {
+                    text:             qsTr("采样设置")
+                    font.bold:        true
+                    Layout.fillWidth: true
+                }
+
+                QGCCheckBox {
+                    id:               samplePointCheckBox
+                    text:             qsTr("到达此航点时自动采样")
+                    Layout.fillWidth: true
+                    onClicked:        _handleSamplePointClick()
+                }
+
+                // 采样停留时间（NAV_WAYPOINT 的 param1）：进任务、上传载具、飞行界面都认得
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing:          ScreenTools.defaultFontPixelWidth
+                    visible:          samplePointCheckBox.checked
+
+                    QGCLabel { text: qsTr("Hold at sample point") }
+
+                    FactTextField {
+                        fact:                  missionItem.holdTimeFact
+                        showUnits:             true
+                        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
+                    }
+                }
+
+                QGCLabel {
+                    Layout.fillWidth: true
+                    wrapMode:         Text.WordWrap
+                    font.pointSize:   ScreenTools.smallFontPointSize
+                    text:             qsTr("Only one sample point is allowed per route. Setting a new one moves it away from the current waypoint.")
+                    visible:          samplePointCheckBox.checked
+                }
+            }
+
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: _fieldSpacing
                 visible: tabBar.showBasicItems
 
+                // 无人船用不到高度：整个高度输入区隐藏
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: _fieldSpacing
-                    visible: _specifiesAltitude
+                    visible: false
 
                     RowLayout {
                         Layout.fillWidth: true

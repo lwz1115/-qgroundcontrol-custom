@@ -153,6 +153,19 @@
             "keywords": "mission,loop,return,home,rtl"
         },
         {
+            "name": "autonomousNavSpeed",
+            "shortDesc": "Autonomous navigation speed",
+            "longDesc": "The real speed the USV uses for autonomous navigation. Used to estimate the remaining mission time shown in the fly view telemetry.",
+            "type": "double",
+            "default": 1.0,
+            "min": 0.1,
+            "units": "m/s",
+            "decimalPlaces": 1,
+            "userMin": 0.1,
+            "userMax": 5.0,
+            "label": "Autonomous navigation speed"
+        },
+        {
             "name": "audioMuted",
             "shortDesc": "Mute audio output",
             "longDesc": "Mutes all audio output without changing the volume level.",

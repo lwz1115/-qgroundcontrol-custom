@@ -80,10 +80,17 @@ void SpeedSection::appendSectionItems(QList<MissionItem*>& items, QObject* missi
     // IMPORTANT NOTE: If anything changes here you must also change SpeedSection::scanForSettings
 
     if (_specifyFlightSpeed) {
+        // 地面无人船（rover/sub）用地面速度（param1=1），不能用空速（param1=0）：
+        // ArduPilot Rover 没有空速概念，原先对非 multiRotor 一律发空速命令会被飞控忽略，
+        // 船仍按自身巡航速度（如 10 m/s）走，导致地面站设置的速度不生效。
+        // 只有固定翼才用空速。
+        const bool useGroundspeed = _masterController->controllerVehicle()->multiRotor()
+                                    || _masterController->controllerVehicle()->rover()
+                                    || _masterController->controllerVehicle()->sub();
         MissionItem* item = new MissionItem(seqNum++,
                                             MAV_CMD_DO_CHANGE_SPEED,
                                             MAV_FRAME_MISSION,
-                                            _masterController->controllerVehicle()->multiRotor() ? 1 /* groundspeed */ : 0 /* airspeed */,    // Change airspeed or groundspeed
+                                            useGroundspeed ? 1 /* groundspeed */ : 0 /* airspeed */,
                                             _flightSpeedFact.rawValue().toDouble(),
                                             -1,                                                                 // No throttle change
                                             0,                                                                  // Absolute speed change

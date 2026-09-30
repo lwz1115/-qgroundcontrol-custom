@@ -17129,6 +17129,26 @@ Click &apos;Ok&apos; to upload the Plan anyway.</source>
       <source>Upload</source>
       <translation>上传</translation>
     </message>
+    <message>
+      <source>Speed</source>
+      <translation>速度</translation>
+    </message>
+    <message>
+      <source>Autonomous navigation speed (max 5 m/s)</source>
+      <translation>自主导航速度（最大 5 m/s）</translation>
+    </message>
+    <message>
+      <source>Apply</source>
+      <translation>确定</translation>
+    </message>
+    <message>
+      <source>Set Speed</source>
+      <translation>设置速度</translation>
+    </message>
+    <message>
+      <source>Apply %1 m/s to all waypoints? The boat moves at this speed after upload.</source>
+      <translation>将 %1 m/s 应用于所有航点？上传后船将按此速度运动。</translation>
+    </message>
   </context>
   <context>
     <name>PlanViewToolBar</name>
@@ -22831,6 +22851,14 @@ If a vehicle still has this key configured, you will no longer be able to commun
       <location filename="../src/FlyView/TelemetryValuesBar.qml" line="86"/>
       <source>Date:</source>
       <translation>日期：</translation>
+    </message>
+    <message>
+      <source>Mission Left:</source>
+      <translation>任务剩余：</translation>
+    </message>
+    <message>
+      <source>Next WP:</source>
+      <translation>下一航点：</translation>
     </message>
   </context>
   <context>

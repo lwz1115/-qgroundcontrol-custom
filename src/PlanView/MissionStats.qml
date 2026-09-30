@@ -100,14 +100,16 @@ Rectangle {
                     font.pointSize: ScreenTools.smallFontPointSize
                 }
 
-                QGCLabel { text: qsTr("Alt diff:"); font.pointSize: _dataFontSize; }
+                // 无人船不关心高度：隐藏选中航点的高度差（后续空隙一起隐藏，保留对齐）
+                QGCLabel { text: qsTr("Alt diff:"); font.pointSize: _dataFontSize; visible: false }
                 QGCLabel {
-                    text: _altDifferenceText
-                    font.pointSize: _dataFontSize
+                    text:             _altDifferenceText
+                    font.pointSize:   _dataFontSize
                     Layout.minimumWidth: _mediumValueWidth
+                    visible:          false
                 }
 
-                Item { width: 1; height: 1 }
+                Item { width: 1; height: 1; visible: false }
 
                 QGCLabel { text: qsTr("Azimuth:"); font.pointSize: _dataFontSize; }
                 QGCLabel {

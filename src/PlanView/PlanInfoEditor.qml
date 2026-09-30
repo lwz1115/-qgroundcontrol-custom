@@ -65,12 +65,11 @@ Rectangle {
             }
         }
 
-        // ── Vehicle Info ──
+        // ── 飞行器信息：无人船专用，直接写死机型 ──
         SectionHeader {
             id: vehicleInfoSectionHeader
             Layout.fillWidth: true
-            text: qsTr("Vehicle Info")
-            visible: !_root._waypointsOnlyMode && (_root._multipleFirmware || _root._multipleVehicleTypes)
+            text: qsTr("飞行器信息")
         }
 
         RowLayout {
@@ -78,40 +77,19 @@ Rectangle {
             spacing: ScreenTools.defaultFontPixelWidth
             visible: vehicleInfoSectionHeader.visible && vehicleInfoSectionHeader.checked
 
-            FactComboBox {
-                objectName: "planInfo_firmwareCombo"
-                fact: QGroundControl.settingsManager.appSettings.offlineEditingFirmwareClass
-                indexModel: false
-                Layout.fillWidth: true
-                visible: _root._multipleFirmware && _root._allowFWVehicleTypeSelection
-            }
-            QGCLabel {
-                objectName: "planInfo_firmwareLabel"
-                text: _root._controllerVehicle ? _root._controllerVehicle.firmwareTypeString : ""
-                Layout.fillWidth: true
-                visible: _root._multipleFirmware && !_root._allowFWVehicleTypeSelection
-            }
-
-            FactComboBox {
-                objectName: "planInfo_vehicleTypeCombo"
-                fact: QGroundControl.settingsManager.appSettings.offlineEditingVehicleClass
-                indexModel: false
-                Layout.fillWidth: true
-                visible: _root._multipleVehicleTypes && _root._allowFWVehicleTypeSelection
-            }
             QGCLabel {
                 objectName: "planInfo_vehicleTypeLabel"
-                text: _root._controllerVehicle ? _root._controllerVehicle.vehicleTypeString : ""
+                text: qsTr("无人船")
                 Layout.fillWidth: true
-                visible: _root._multipleVehicleTypes && !_root._allowFWVehicleTypeSelection
             }
         }
 
-        // ── Expected Home Position ──
+        // ── Expected Home Position（无人船不显示）──
         SectionHeader {
             id: plannedHomePositionSection
             Layout.fillWidth: true
             text: qsTr("Expected Home Position")
+            visible: false
         }
 
         // Prompt to click map to set/move home position
@@ -119,7 +97,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.topMargin: ScreenTools.defaultFontPixelWidth / 2
             spacing: ScreenTools.defaultFontPixelWidth / 2
-            visible: plannedHomePositionSection.checked && _root.planMasterController.showCreateFromTemplate
+            visible: false
 
             Image {
                 source: "qrc:///qmlimages/MapHome.svg"
@@ -151,7 +129,7 @@ Rectangle {
             Layout.fillWidth: true
             columnSpacing: ScreenTools.defaultFontPixelWidth
             columns: 2
-            visible: plannedHomePositionSection.checked && _root.missionController.homePositionSet
+            visible: false
 
             QGCLabel {
                 text: qsTr("Altitude (AMSL)")
@@ -177,7 +155,7 @@ Rectangle {
             font.pointSize: ScreenTools.smallFontPointSize
             text: qsTr("Actual position/alt set by vehicle at flight time.")
             horizontalAlignment: Text.AlignHCenter
-            visible: plannedHomePositionSection.checked && _root.missionController.homePositionSet
+            visible: false
         }
 
         // ── Plan Templates ──

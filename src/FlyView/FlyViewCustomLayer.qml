@@ -24,6 +24,18 @@ Item {
     /// 摄像头小窗（FlyView.qml 的 PipView）。水质与采样卡片一竖排、紧贴在它顶部上方，随它缩放/移动。
     property var pipView
 
+    /// PipView 挂在 FlyView 根上，而本层铺在 widgetLayer（原点被工具条下移了 topMargin）。
+    /// 直接用 PipView 的坐标会把图标下移一整个工具条高度、正好落进小窗里被它盖住 —— 必须换算到本层坐标。
+    readonly property point pipTopLeft: {
+        // mapToItem 自身不建立响应式依赖：显式读一遍小窗几何，小窗缩放时本绑定才会重算
+        const gx = pipView ? pipView.x : 0
+        const gy = pipView ? pipView.y : 0
+        const gw = pipView ? pipView.width : 0
+        const gh = pipView ? pipView.height : 0
+        return pipView ? pipView.mapToItem(_root, 0, 0) : Qt.point(0, 0)
+    }
+    readonly property real pipWidth: pipView ? pipView.width : 0
+
     // since this file is a placeholder for the custom layer in a standard build, we will just pass through the parent insets
     QGCToolInsets {
         id:                     _toolInsets
@@ -49,7 +61,8 @@ Item {
         id:                 waterQualityOverlay
         anchors.fill:       parent
         parentToolInsets:   _root.parentToolInsets
-        pipView:            _root.pipView
+        pipTopLeft:         _root.pipTopLeft
+        pipWidth:           _root.pipWidth
     }
 
     // 水质采样控制：与水滴卡片同一竖列、排在它上方，一起紧贴摄像头小窗顶部
@@ -57,6 +70,7 @@ Item {
         id:                 waterSamplingControl
         anchors.fill:       parent
         parentToolInsets:   _root.parentToolInsets
-        pipView:            _root.pipView
+        pipTopLeft:         _root.pipTopLeft
+        pipWidth:           _root.pipWidth
     }
 }

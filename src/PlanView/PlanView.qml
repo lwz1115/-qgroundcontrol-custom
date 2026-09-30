@@ -541,6 +541,14 @@ Item {
                         }
                     },
                     ToolStripAction {
+                        objectName: "planToolStrip_speedButton"
+                        text: qsTr("Speed")
+                        iconSource: "/res/waypoint.svg"
+                        enabled: _missionController.flyThroughCommandsAllowed
+                        visible: toolStrip._isMissionLayer
+                        dropPanelComponent: speedDropPanel
+                    },
+                    ToolStripAction {
                         text: qsTr("Stats")
                         iconSource: "/res/chevron-double-right.svg"
                         visible: missionStatus.hidden && QGroundControl.corePlugin.options.showMissionStatus
@@ -721,11 +729,13 @@ Item {
 
                 Rectangle {
                     id: terrainButton
+                    // 无人船不显示地形剖面图：隐藏该选项，默认只展示统计面板
+                    visible: false
                     implicitWidth: missionStatsButtonLayout._buttonImplicitWidth
                     implicitHeight: implicitWidth
                     color: checked ? QGroundControl.globalPalette.buttonHighlight : QGroundControl.globalPalette.button
 
-                    property bool checked: true
+                    property bool checked: false
 
                     QGCColoredImage {
                         anchors.margins: missionStatsButtonLayout._buttonImageMargins
@@ -749,7 +759,7 @@ Item {
                     implicitHeight: implicitWidth
                     color: checked ? QGroundControl.globalPalette.buttonHighlight : QGroundControl.globalPalette.button
 
-                    property bool checked: false
+                    property bool checked: true
 
                     QGCColoredImage {
                         anchors.margins: missionStatsButtonLayout._buttonImageMargins
@@ -831,6 +841,56 @@ Item {
                 }
             }
         } // Column
+    }
+
+    // 自主导航真实速度：写入任务所有航点的飞行速度，上传后船按此速度运动
+    Component {
+        id: speedDropPanel
+
+        ColumnLayout {
+            spacing: ScreenTools.defaultFontPixelWidth * 0.5
+            Layout.minimumWidth: ScreenTools.defaultFontPixelWidth * 16
+
+            QGCLabel {
+                text:             qsTr("Autonomous navigation speed (max 5 m/s)")
+                Layout.fillWidth: true
+                wrapMode:         Text.WordWrap
+            }
+
+            // 只保留输入框，不要滑轨
+            FactTextField {
+                id:               speedInput
+                Layout.fillWidth: true
+                fact:             QGroundControl.settingsManager.appSettings.autonomousNavSpeed
+            }
+
+            QGCButton {
+                Layout.fillWidth: true
+                text:             qsTr("Apply")
+
+                onClicked: {
+                    const speed = speedInput.fact.value
+                    if (!speed || speed <= 0) {
+                        return
+                    }
+                    QGroundControl.showMessageDialog(_root, qsTr("Set Speed"),
+                        qsTr("Apply %1 m/s to all waypoints? The boat moves at this speed after upload.")
+                            .arg(speed),
+                        Dialog.Yes | Dialog.Cancel,
+                        function() {
+                            const items = _missionController.visualItems
+                            for (let i = 0; i < items.count; i++) {
+                                const item = items.get(i)
+                                if (item && item.isSimpleItem === true && item.speedSection && item.speedSection.available) {
+                                    item.speedSection.specifyFlightSpeed = true
+                                    item.speedSection.flightSpeed.rawValue = speed
+                                }
+                            }
+                            dropPanel.hide()
+                        })
+                }
+            }
+        }
     }
 
     QGCPopupDialogFactory {

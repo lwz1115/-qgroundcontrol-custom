@@ -28,6 +28,122 @@ Item {
     readonly property string _longitudeText:    _vehicle ? _vehicle.longitude.toFixed(6) : "--"
     readonly property string _voltageText:      _battery && _battery.voltage ? _battery.voltage.valueString + " " + _battery.voltage.units : "--"
 
+    /// 用户设置的自主导航真实速度（m/s）：任务剩余按它预算，而不是 QGC 默认巡航速度
+    readonly property real _autonomousNavSpeed: QGroundControl.settingsManager.appSettings.autonomousNavSpeed.value
+
+    /// 飞行中当前正在前往的航点。
+    /// 不能用 currentPlanViewItem：MissionController._currentMissionIndexChanged 只更新
+    /// isCurrentItem 并发信号，从不调用 setCurrentPlanViewSeqNum，所以它停在规划时选中的那一项，
+    /// 船跑到最后一个航点时 distanceFromStart 仍不推进，任务剩余会一直按全程算。
+    /// currentMissionIndex 则随 MISSION_CURRENT 实时刷新，这里按序号回查航点。
+    readonly property var _activeMissionItem: {
+        const mc = control._flyMissionController
+        if (!mc || !mc.visualItems) {
+            return null
+        }
+        const seq = mc.currentMissionIndex
+        let lastCoordinateItem = null
+        for (let i = 0; i < mc.visualItems.count; i++) {
+            const item = mc.visualItems.get(i)
+            if (!item || !item.specifiesCoordinate) {
+                continue
+            }
+            lastCoordinateItem = item
+            if (item.sequenceNumber === seq) {
+                return item
+            }
+        }
+        // MISSION_CURRENT 指向 DO_JUMP 等非坐标项时退回最后一个坐标航点
+        return lastCoordinateItem
+    }
+
+    /// 剩余任务距离（m）。
+    /// 只算 planned - current.distanceFromStart 会让数值在“到达航点”时才跳变（MISSION_CURRENT 到点才更新），
+    /// 两航点之间完全不动。这里再加上“船当前位置到当前航点”的实时距离，船在航段中间移动时剩余连续减小，
+    /// 到达当前航点时该项归零，MISSION_CURRENT 跳下一个航点，数值保持连续。
+    readonly property real _missionRemainingDistance: {
+        const mc = control._flyMissionController
+        const item = control._activeMissionItem
+        if (!mc || !item) {
+            return NaN
+        }
+        const planned = Number(mc.missionPlannedDistance)
+        const flown = Number(item.distanceFromStart)
+        if (isNaN(planned)) {
+            return NaN
+        }
+        if (isNaN(flown)) {
+            return planned
+        }
+        const vehicle = control._vehicle
+        let toCurrent = 0
+        if (vehicle && vehicle.coordinate && item.coordinate && item.coordinate.isValid) {
+            const d = vehicle.coordinate.distanceTo(item.coordinate)
+            toCurrent = isNaN(d) ? 0 : d
+        }
+        return Math.max(0, planned - flown + toCurrent)
+    }
+
+    /// 当前航点之后所有采样停留时间（s）：真实预算要把停留也加进去
+    readonly property real _missionRemainingHoldSeconds: {
+        const mc = control._flyMissionController
+        if (!mc || !mc.visualItems) {
+            return 0
+        }
+        const current = control._activeMissionItem
+        let pastCurrent = !current
+        let total = 0
+        for (let i = 0; i < mc.visualItems.count; i++) {
+            const item = mc.visualItems.get(i)
+            if (!item) {
+                continue
+            }
+            if (!pastCurrent) {
+                if (item === current) {
+                    pastCurrent = true
+                }
+                continue
+            }
+            if (item.isSimpleItem && item.holdTimeFact) {
+                const hold = Number(item.holdTimeFact.value)
+                if (!isNaN(hold) && hold > 0) {
+                    total += hold
+                }
+            }
+        }
+        return total
+    }
+
+    /// 任务预估剩余时间：剩余距离 / 用户设置的真实速度 + 剩余停留时间，格式与上方 Time 一致 HH:MM:SS
+    /// 到最后一个航点且剩余距离已小于 1 米时归零（显示 00:00:00），避免残余的小距离让时间停留在 00:01 之类。
+    readonly property string _missionRemainingText: {
+        const speed = control._autonomousNavSpeed
+        const dist = control._missionRemainingDistance
+        if (!speed || isNaN(dist)) {
+            return "--"
+        }
+        if (dist < 1.0) {
+            return "00:00:00"
+        }
+        const total = Math.max(0, Math.floor(dist / speed + control._missionRemainingHoldSeconds))
+        const h = Math.floor(total / 3600)
+        const m = Math.floor((total % 3600) / 60)
+        const sec = total % 60
+        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec
+    }
+    /// 到下一个航点的距离（navControllerOutput.wp_dist）
+    /// 到下一个航点的距离：用当前航点坐标与船当前位置直接算（米）。
+    /// 不依赖 NAV_CONTROLLER_OUTPUT.wp_dist：USV 固件大概率不发该消息，fact 恒为 0。
+    readonly property string _nextWaypointText: {
+        const vehicle = control._vehicle
+        const item = control._activeMissionItem
+        if (!vehicle || !item || !vehicle.coordinate || !item.coordinate || !item.coordinate.isValid) {
+            return "--"
+        }
+        const d = vehicle.coordinate.distanceTo(item.coordinate)
+        return isNaN(d) ? "--" : d.toFixed(1) + " m"
+    }
+
     // 计数用的控制器：飞行视图那份，实时跟踪载具 MISSION_CURRENT（规划视图那份只跟编辑内容，不能用来算圈）
     readonly property var _flyMissionController: {
         const planController = globals.planMasterControllerFlyView
@@ -365,7 +481,9 @@ Item {
         font.pointSize: ScreenTools.defaultFontPointSize
         font.family:    ScreenTools.normalFontFamily
 
-        readonly property real widestLabelWidth: Math.max(advanceWidth(qsTr("Loops:")), advanceWidth(qsTr("Session Time:")))
+        readonly property real widestLabelWidth: Math.max(
+            advanceWidth(qsTr("Loops:")), advanceWidth(qsTr("Session Time:")),
+            advanceWidth(qsTr("Mission Left:")), advanceWidth(qsTr("Next WP:")))
     }
 
     Rectangle {
@@ -408,6 +526,20 @@ Item {
             QGCLabel { text: control._timeText;       Layout.preferredWidth: control._valueWidth }
             QGCLabel { text: qsTr("Date:");          Layout.preferredWidth: control._labelWidth; horizontalAlignment: Text.AlignRight }
             QGCLabel { text: control._dateText;       Layout.preferredWidth: control._valueWidth }
+
+            // 无人船：任务剩余时间 + 下一航点距离（接在时间/日期下面，格式一致）
+            QGCLabel {
+                text: qsTr("Mission Left:")
+                Layout.preferredWidth: control._labelWidth
+                horizontalAlignment: Text.AlignRight
+            }
+            QGCLabel { text: control._missionRemainingText; Layout.preferredWidth: control._valueWidth }
+            QGCLabel {
+                text: qsTr("Next WP:")
+                Layout.preferredWidth: control._labelWidth
+                horizontalAlignment: Text.AlignRight
+            }
+            QGCLabel { text: control._nextWaypointText;    Layout.preferredWidth: control._valueWidth }
         }
     }
 

@@ -29,6 +29,7 @@ public:
     DEFINE_SETTINGFACT(samplePointMinSpacing)
     DEFINE_SETTINGFACT(missionLoopCount)
     DEFINE_SETTINGFACT(missionReturnHomeAfterLoop)
+    DEFINE_SETTINGFACT(autonomousNavSpeed)
     DEFINE_SETTINGFACT(audioMuted)
     DEFINE_SETTINGFACT(audioVolume)
     DEFINE_SETTINGFACT(virtualJoystick)

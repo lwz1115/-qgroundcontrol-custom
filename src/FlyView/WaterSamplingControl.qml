@@ -17,8 +17,9 @@ Item {
 
     /// 上层传下来的可用区域（已扣掉工具栏、虚拟摇杆、画中画视频等占位），图标按它避让
     property var parentToolInsets
-    /// 摄像头小窗（FlyView.qml 的 PipView，缩到最小即“图标”）。卡片紧贴它顶部上方，随它缩放/移动。
-    property var pipView
+    /// 摄像头小窗左上角（已换算到本控件坐标系）与宽度，由 FlyViewCustomLayer 提供
+    property point pipTopLeft
+    property real  pipWidth: 0
 
     readonly property real _margin:   ScreenTools.defaultFontPixelWidth * 0.75
     readonly property real _iconSize: ScreenTools.defaultFontPixelHeight * 1.7
@@ -41,15 +42,17 @@ Item {
     readonly property bool _camActive: QGroundControl.videoManager.isStreamSource
                                         || QGroundControl.videoManager.isUvc
     /// 卡片边长：随摄像头小窗宽度联动（两卡片严格一致），封顶防单边过大
-    readonly property real _cardSize:  (_camActive && pipView)
-                                       ? Math.min(pipView.width * 0.28, ScreenTools.defaultFontPixelHeight * 1.9)
+    readonly property real _cardSize:  (_camActive && pipWidth > 0)
+                                       ? Math.min(pipWidth * 0.28, ScreenTools.defaultFontPixelHeight * 1.9)
                                        : ScreenTools.defaultFontPixelHeight * 1.7
-    /// 卡片间距 / 两卡竖排总高 / 卡片左缘（贴齐小窗左缘）/ 卡片列顶部（紧贴小窗顶）
+    /// 卡片间距 / 两卡竖排总高 / 卡片左缘（贴齐小窗左缘）/ 卡片列顶部
     readonly property real _spacing:    ScreenTools.defaultFontPixelWidth * 0.25
+    /// 卡片列与摄像头小窗顶的间隙：留出空隙，避免小窗边框/画面遮住卡片
+    readonly property real _pipClearance: ScreenTools.defaultFontPixelWidth * 0.75
     readonly property real _rowHeight:  control._cardSize * 2 + control._spacing
-    readonly property real _iconX:      pipView ? pipView.x : control._margin
+    readonly property real _iconX:      control.pipTopLeft.x
     readonly property real _iconsTopY:  control._camActive
-                                        ? (pipView.y - control._rowHeight - control._spacing)
+                                        ? (control.pipTopLeft.y - control._rowHeight - control._pipClearance)
                                         : (parent.height - control._rowHeight - control._margin - control._bottomInset)
 
     /// 选中的瓶子（1 或 2）
