@@ -96,6 +96,25 @@ Commit messages follow **Conventional Commits** — the type drives release auto
 (`.releaserc.json` → semantic-release). Use: `feat`, `fix`, `perf`, `revert` (release-triggering);
 `docs`, `style`, `chore`, `refactor`, `test`, `build`, `ci` (no release). Example: `fix(Vehicle): guard null activeVehicle in telemetry handler`.
 
+### This project's常用提交类型（USV 定制分支）
+
+Use these types for commits on this customization branch. Keep the subject **short** —
+for a single change write only the type (e.g. `test`), skip filler like "进行/完成".
+
+- `feat` — 新功能（双摄像头、采样、ETA、速度设置、循环次数等）
+- `fix` — 修 bug（崩溃、计算不准、设置不生效等）
+- `refactor` — 重构（不改功能）
+- `docs` — 文档（需求文档、README）
+- `test` — 测试
+- `chore` — 构建/配置/杂项（CMake、设置 JSON、脚本）
+- `ui` — 界面/样式调整（模式菜单、隐藏元素、图标布局、面板样式）
+- `api` — 接口变更（新增 Q_PROPERTY / Q_INVOKABLE / 信号）
+- `config` — 配置变更（SettingsGroup JSON、枚举/默认值）
+- `revert` — 回滚
+
+Example: `fix(Vehicle): rover cruise speed not applied — use groundspeed DO_CHANGE_SPEED`.
+Single-purpose commits stay minimal: only one type per commit, subject ≤ ~72 chars.
+
 Keep pull request history intentional and easy to review. Organize related work into coherent commits and
 combine fixups or closely related incremental changes before publication. Avoid a trail of tiny work-in-progress,
 cleanup, or review-fix commits. Each commit should represent a clear, reviewable change without mixing unrelated work.

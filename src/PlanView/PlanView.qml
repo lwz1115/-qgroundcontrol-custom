@@ -869,10 +869,13 @@ Item {
                 text:             qsTr("Apply")
 
                 onClicked: {
-                    const speed = speedInput.fact.value
-                    if (!speed || speed <= 0) {
+                    // 直接读输入框文本（不依赖失焦才写入 fact.value），
+                    // 否则用户输入后不回车直接点确定可能取到旧值
+                    const speed = parseFloat(speedInput.text)
+                    if (isNaN(speed) || speed <= 0) {
                         return
                     }
+                    speedInput.fact.value = speed
                     QGroundControl.showMessageDialog(_root, qsTr("Set Speed"),
                         qsTr("Apply %1 m/s to all waypoints? The boat moves at this speed after upload.")
                             .arg(speed),

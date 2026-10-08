@@ -131,7 +131,6 @@ Item {
         const sec = total % 60
         return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec
     }
-    /// 到下一个航点的距离（navControllerOutput.wp_dist）
     /// 到下一个航点的距离：用当前航点坐标与船当前位置直接算（米）。
     /// 不依赖 NAV_CONTROLLER_OUTPUT.wp_dist：USV 固件大概率不发该消息，fact 恒为 0。
     readonly property string _nextWaypointText: {
