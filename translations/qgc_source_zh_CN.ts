@@ -8902,8 +8902,8 @@ VTOL</source>
     </message>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="33"/>
-      <source>Start Mission</source>
-      <translation>自动导航</translation>
+      <source>Auto</source>
+      <translation>自动</translation>
     </message>
     <message>
       <location filename="../src/FlyView/GuidedActionsController.qml" line="34"/>
@@ -20582,16 +20582,24 @@ If a vehicle still has this key configured, you will no longer be able to commun
       <translation>到达此航点时自动采样</translation>
     </message>
     <message>
-      <source>This route already has a sample point (waypoint #%1). Move the sample point to this waypoint?</source>
-      <translation>当前航线已有采样点（航点 #%1），确定将采样点设置到此航点吗？</translation>
+      <source>选择采样瓶</source>
+      <translation>选择采样瓶</translation>
     </message>
     <message>
-      <source>Only one sample point is allowed per route. Setting a new one moves it away from the current waypoint.</source>
-      <translation>每条航线只允许一个采样点，设置新采样点后旧航点将不再标记为采样点。</translation>
+      <source>选择容量</source>
+      <translation>选择容量</translation>
     </message>
     <message>
-      <source>Hold at sample point</source>
-      <translation>采样停留时间</translation>
+      <source>瓶%1</source>
+      <translation>瓶%1</translation>
+    </message>
+    <message>
+      <source>预计采样时长：%1秒</source>
+      <translation>预计采样时长：%1秒</translation>
+    </message>
+    <message>
+      <source>瓶3至瓶8仅供界面选择，当前飞控自动采样只支持瓶1和瓶2。</source>
+      <translation>瓶3至瓶8仅供界面选择，当前飞控自动采样只支持瓶1和瓶2。</translation>
     </message>
     <message>
       <location filename="../src/PlanView/SimpleItemEditor.qml" line="49"/>
@@ -22859,6 +22867,13 @@ If a vehicle still has this key configured, you will no longer be able to commun
     <message>
       <source>Next WP:</source>
       <translation>下一航点：</translation>
+    </message>
+  </context>
+  <context>
+    <name>FlyViewClearTrajectoryAction</name>
+    <message>
+      <source>轨迹</source>
+      <translation>轨迹</translation>
     </message>
   </context>
   <context>
