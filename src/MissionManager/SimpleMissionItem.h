@@ -32,15 +32,26 @@ public:
     Q_PROPERTY(bool             isLoiterItem            READ isLoiterItem                                       NOTIFY isLoiterItemChanged)
     Q_PROPERTY(bool             showLoiterRadius        READ showLoiterRadius                                   NOTIFY showLoiterRadiusChanged)
     Q_PROPERTY(double           loiterRadius            READ loiterRadius           WRITE setRadius             NOTIFY loiterRadiusChanged)
-    /// 采样点：由任务数据派生（航点 且 param1 停留时间 > 0），因此上传/下载/换 GCS 都不会丢
+    /// 采样点：旧任务由 param1 停留时间识别，新任务由自动采样配置识别
     Q_PROPERTY(bool             isSamplePoint           READ isSamplePoint          NOTIFY isSamplePointChanged)
     Q_PROPERTY(Fact*            holdTimeFact            READ holdTimeFact           CONSTANT)                            ///< 采样停留时间（NAV_WAYPOINT 的 param1，单位：秒）
+    Q_PROPERTY(bool             autoSampleEnabled       READ autoSampleEnabled      WRITE setAutoSampleEnabled       NOTIFY sampleConfigurationChanged)
+    Q_PROPERTY(int              sampleBottle            READ sampleBottle           WRITE setSampleBottle            NOTIFY sampleConfigurationChanged)
+    Q_PROPERTY(int              sampleCapacityMl        READ sampleCapacityMl       WRITE setSampleCapacityMl        NOTIFY sampleConfigurationChanged)
+    Q_PROPERTY(double           sampleDurationSeconds   READ sampleDurationSeconds  NOTIFY sampleConfigurationChanged)
 
-    [[nodiscard]] bool isSamplePoint() const { return (_missionItem._commandFact.rawValue().toInt() == MAV_CMD_NAV_WAYPOINT) && (_missionItem._param1Fact.rawValue().toDouble() > 0); }
+    [[nodiscard]] bool isSamplePoint() const;
+    [[nodiscard]] bool autoSampleEnabled() const { return _autoSampleEnabled; }
+    [[nodiscard]] int sampleBottle() const { return _sampleBottle; }
+    [[nodiscard]] int sampleCapacityMl() const { return _sampleCapacityMl; }
+    [[nodiscard]] double sampleDurationSeconds() const;
     [[nodiscard]] Fact* holdTimeFact() { return &_missionItem._param1Fact; }
 
-    /// 设为/取消采样点：勾选时把停留时间设为 holdSeconds，取消时清零
+    /// 设为/取消自动采样点；holdSeconds 仅保留旧调用接口，新流程由飞控采样参数计算时长
     Q_INVOKABLE void setIsSamplePoint(bool isSamplePoint, double holdSeconds);
+    void setAutoSampleEnabled(bool enabled);
+    void setSampleBottle(int bottle);
+    void setSampleCapacityMl(int capacityMl);
 
     /// Optional sections
     Q_PROPERTY(QObject*         speedSection            READ speedSection                                       NOTIFY speedSectionChanged)
@@ -159,6 +170,7 @@ signals:
     void showLoiterRadiusChanged    (void);
     void loiterRadiusChanged        (double loiterRadius);
     void isSamplePointChanged       ();
+    void sampleConfigurationChanged ();
 
 private slots:
     void _setDirty                              (void);
@@ -181,6 +193,9 @@ private slots:
 private:
     void _connectSignals        (void);
     void _setupMetaData         (void);
+    bool _scanForAutoSampleCommands(QmlObjectListModel* visualItems, int scanIndex);
+    int  _autoSampleCommandCount(void) const;
+    void _appendAutoSampleCommands(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum) const;
     void _updateOptionalSections(void);
     void _rebuildNaNFacts       (void);
     void _rebuildComboBoxFacts  (void);
@@ -188,6 +203,9 @@ private:
     MissionItem     _missionItem;
     bool            _rawEdit =                  false;
     bool            _dirty =                    false;
+    bool            _autoSampleEnabled =         false;
+    int             _sampleBottle =              0;
+    int             _sampleCapacityMl =          0;
     bool            _ignoreDirtyChangeSignals = false;
     QGeoCoordinate  _mapCenterHint;
     SpeedSection*   _speedSection =             nullptr;

@@ -3,6 +3,8 @@
 #include "PlanMasterController.h"
 #include "Vehicle.h"
 #include "QmlObjectListModel.h"
+#include "SettingsManager.h"
+#include "AppSettings.h"
 
 const char* SpeedSection::_flightSpeedName = "FlightSpeed";
 
@@ -20,10 +22,20 @@ SpeedSection::SpeedSection(PlanMasterController* masterController, QObject* pare
     }
 
     double flightSpeed = 0;
-    if (_masterController->controllerVehicle()->multiRotor()) {
-        flightSpeed = _masterController->controllerVehicle()->defaultHoverSpeed();
+    // 航点速度记忆：统一用 autonomousNavSpeed（默认 1 m/s、记忆上次设置、上限 5 m/s），
+    // 与航线工具条里的速度面板共用同一个记忆值。
+    // 不要回退到 defaultCruiseSpeed/defaultHoverSpeed：无人船默认巡航速度可能大于 5 m/s，
+    // 这既不符合本功能的限速，也不是用户上次确认的规划速度。
+    AppSettings* appSettings = SettingsManager::instance()->appSettings();
+    const double rememberedSpeed = appSettings->autonomousNavSpeed()->rawValue().toDouble();
+    if (rememberedSpeed > 0.0) {
+        flightSpeed = rememberedSpeed;
     } else {
-        flightSpeed = _masterController->controllerVehicle()->defaultCruiseSpeed();
+        // 记忆值异常（0 或负数）时兜底用元数据默认值 1 m/s，不要碰载具的巡航速度
+        flightSpeed = _metaDataMap[_flightSpeedName]->rawDefaultValue().toDouble();
+        if (flightSpeed <= 0.0) {
+            flightSpeed = 1.0;
+        }
     }
 
     _metaDataMap[_flightSpeedName]->setRawDefaultValue(flightSpeed);
@@ -45,7 +57,14 @@ bool SpeedSection::settingsSpecified(void) const
 void SpeedSection::setAvailable(bool available)
 {
     if (available != _available) {
-        if (available && (_masterController->controllerVehicle()->multiRotor() || _masterController->controllerVehicle()->fixedWing())) {
+        // 地面无人船（rover/sub）同样需要能设置航行速度：ArduPilot Rover 支持
+        // MAV_CMD_DO_CHANGE_SPEED 的地面速度（param1=1）。原先只放开 multiRotor/fixedWing，
+        // 导致无人船的 _available 永远为 false，scanForSection 直接返回、appendSectionItems
+        // 也拿不到调用，地面站设置的速度压根不会写进任务，船只能按飞控默认巡航速度跑。
+        if (available && (_masterController->controllerVehicle()->multiRotor()
+                          || _masterController->controllerVehicle()->fixedWing()
+                          || _masterController->controllerVehicle()->rover()
+                          || _masterController->controllerVehicle()->sub())) {
             _available = available;
             emit availableChanged(available);
         }
@@ -72,7 +91,8 @@ void SpeedSection::setSpecifyFlightSpeed(bool specifyFlightSpeed)
 
 int SpeedSection::itemCount(void) const
 {
-    return _specifyFlightSpeed ? 1: 0;
+    // DO_CHANGE_SPEED 是真实 MAVLink 任务项，必须计入协议序号才能与 MISSION_CURRENT / DO_JUMP 对齐。
+    return _specifyFlightSpeed ? 1 : 0;
 }
 
 void SpeedSection::appendSectionItems(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum)
@@ -124,7 +144,12 @@ bool SpeedSection::scanForSection(QmlObjectListModel* visualItems, int scanIndex
             return false;
         }
         visualItems->removeAt(scanIndex)->deleteLater();
-        _flightSpeedFact.setRawValue(missionItem.param2());
+        // 从任务恢复速度命令时把越界值钳制到有效范围（旧任务可能残留超过 5 m/s 上限的速度，
+        // 例如 10.2 m/s）。
+        const Fact* speedFact = SettingsManager::instance()->appSettings()->autonomousNavSpeed();
+        const double minSpeed = speedFact->rawUserMin().isValid() ? speedFact->rawUserMin().toDouble() : 0.0;
+        const double maxSpeed = speedFact->rawUserMax().isValid() ? speedFact->rawUserMax().toDouble() : std::numeric_limits<double>::max();
+        _flightSpeedFact.setRawValue(qBound(minSpeed, missionItem.param2(), maxSpeed));
         setSpecifyFlightSpeed(true);
         return true;
     }

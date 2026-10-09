@@ -56,6 +56,7 @@ public:
     Q_PROPERTY(bool             isCurrentItem                       READ isCurrentItem                      WRITE setIsCurrentItem          NOTIFY isCurrentItemChanged)
     Q_PROPERTY(bool             hasCurrentChildItem                 READ hasCurrentChildItem                WRITE setHasCurrentChildItem    NOTIFY hasCurrentChildItemChanged)                  ///< true: On of this items children is current
     Q_PROPERTY(int              sequenceNumber                      READ sequenceNumber                     WRITE setSequenceNumber         NOTIFY sequenceNumberChanged)
+    Q_PROPERTY(int              missionItemNumber                    READ missionItemNumber                   NOTIFY missionItemNumberChanged)
     Q_PROPERTY(int              lastSequenceNumber                  READ lastSequenceNumber                                                 NOTIFY lastSequenceNumberChanged)
     Q_PROPERTY(bool             specifiesCoordinate                 READ specifiesCoordinate                                                NOTIFY specifiesCoordinateChanged)                  ///< true: Item is associated with a coordinate position
     Q_PROPERTY(bool             isStandaloneCoordinate              READ isStandaloneCoordinate                                             NOTIFY isStandaloneCoordinateChanged)               ///< true: Waypoint line does not go through item
@@ -102,6 +103,7 @@ public:
     double  azimuth             (void) const { return _azimuth; }
     double  distance            (void) const { return _distance; }
     double  distanceFromStart   (void) const { return _distanceFromStart; }
+    int     missionItemNumber   (void) const { return _missionItemNumber; }
     bool    isCurrentItem       (void) const { return _isCurrentItem; }
     bool    hasCurrentChildItem (void) const { return _hasCurrentChildItem; }
     double  terrainAltitude     (void) const { return _terrainAltitude; }
@@ -121,6 +123,7 @@ public:
     void setAzimuth                 (double azimuth);
     void setDistance                (double distance);
     void setDistanceFromStart       (double distanceFromStart);
+    void setMissionItemNumber       (int missionItemNumber);
     void setWizardMode              (bool wizardMode);
     void setParentItem              (VisualMissionItem* parentItem);
 
@@ -226,6 +229,7 @@ signals:
     void isCurrentItemChanged           (bool isCurrentItem);
     void hasCurrentChildItemChanged     (bool hasCurrentChildItem);
     void sequenceNumberChanged          (int sequenceNumber);
+    void missionItemNumberChanged       (int missionItemNumber);
     void isSimpleItemChanged            (bool isSimpleItem);
     void isTakeoffItemChanged           (bool isTakeoffItem);
     void isLandCommandChanged           (void);
@@ -273,6 +277,7 @@ protected:
     double                      _azimuth                    = 0;                                ///< Azimuth to previous waypoint
     double                      _distance                   = 0;                                ///< Distance to previous waypoint
     double                      _distanceFromStart          = 0;                                ///< Flight path cumalative horizontal distance from home point to this item
+    int                         _missionItemNumber          = -1;
     QString                     _editorQml;                                                     ///< Qml resource for editing item
     double                      _missionGimbalYaw           = qQNaN();
     double                      _missionVehicleYaw          = qQNaN();

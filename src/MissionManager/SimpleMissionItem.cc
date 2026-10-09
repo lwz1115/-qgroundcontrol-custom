@@ -12,8 +12,27 @@
 #include "Vehicle.h"
 #include "QGCMath.h"
 
+#include <array>
+#include <string_view>
 #include <QtCore/QStringList>
 #include <QtCore/QJsonArray>
+
+namespace {
+constexpr int kAutoSampleCommandCount = 6;
+constexpr double kTriggerHoldSeconds = 0.2;
+constexpr int kBottlePwmOne = 1500;
+constexpr int kBottlePwmTwo = 1900;
+constexpr int kTriggerPwmActive = 1900;
+constexpr int kTriggerPwmIdle = 1500;
+constexpr std::string_view kAutoSampleEnabledKey = "QGC_autoSampleEnabled";
+constexpr std::string_view kSampleBottleKey = "QGC_sampleBottle";
+constexpr std::string_view kSampleCapacityKey = "QGC_sampleCapacityMl";
+
+bool _isSupportedSampleCapacity(int capacityMl)
+{
+    return capacityMl == 500 || capacityMl == 1000 || capacityMl == 2500 || capacityMl == 5000;
+}
+}
 
 FactMetaData* SimpleMissionItem::_altitudeMetaData =        nullptr;
 FactMetaData* SimpleMissionItem::_commandMetaData =         nullptr;
@@ -247,12 +266,129 @@ SimpleMissionItem::~SimpleMissionItem()
 
 void SimpleMissionItem::setIsSamplePoint(bool isSamplePoint, double holdSeconds)
 {
-    if (isSamplePoint && (command() != MAV_CMD_NAV_WAYPOINT)) {
+    Q_UNUSED(holdSeconds);
+    setAutoSampleEnabled(isSamplePoint);
+}
+
+bool SimpleMissionItem::isSamplePoint(void) const
+{
+    return (command() == MAV_CMD_NAV_WAYPOINT)
+            && (_autoSampleEnabled || (_missionItem.param1() > 0.0));
+}
+
+void SimpleMissionItem::setAutoSampleEnabled(bool enabled)
+{
+    if (enabled && (command() != MAV_CMD_NAV_WAYPOINT)) {
         setCommand(MAV_CMD_NAV_WAYPOINT);
     }
 
-    // 停留时间就是采样点的载体：>0 即为采样点，0 为普通航点
-    _missionItem.setParam1(isSamplePoint ? ((holdSeconds > 0) ? holdSeconds : 10.0) : 0.0);
+    const bool wasSamplePoint = isSamplePoint();
+    const bool changed = (_autoSampleEnabled != enabled) || (_missionItem.param1() != 0.0);
+    if (!changed) {
+        return;
+    }
+
+    _autoSampleEnabled = enabled;
+    _missionItem.setParam1(0.0);
+    if (wasSamplePoint != isSamplePoint()) {
+        emit isSamplePointChanged();
+    }
+    emit sampleConfigurationChanged();
+    setDirty(true);
+    _updateLastSequenceNumber();
+}
+
+void SimpleMissionItem::setSampleBottle(int bottle)
+{
+    bottle = qBound(0, bottle, 8);
+    if (_sampleBottle == bottle) {
+        return;
+    }
+    _sampleBottle = bottle;
+    emit sampleConfigurationChanged();
+    setDirty(true);
+    _updateLastSequenceNumber();
+}
+
+void SimpleMissionItem::setSampleCapacityMl(int capacityMl)
+{
+    if (!_isSupportedSampleCapacity(capacityMl) || (_sampleCapacityMl == capacityMl)) {
+        return;
+    }
+    _sampleCapacityMl = capacityMl;
+    emit sampleConfigurationChanged();
+    setDirty(true);
+    _updateLastSequenceNumber();
+}
+
+double SimpleMissionItem::sampleDurationSeconds(void) const
+{
+    if (!_autoSampleEnabled || (_sampleBottle > 2) || !_isSupportedSampleCapacity(_sampleCapacityMl)) {
+        return 0.0;
+    }
+    Vehicle* vehicle = _masterController->managerVehicle();
+    if (vehicle == nullptr) {
+        vehicle = _masterController->controllerVehicle();
+    }
+    return (vehicle != nullptr && vehicle->waterSamplingSupported() && vehicle->waterSamplingEnabled()
+            && (_sampleCapacityMl <= vehicle->waterMaxVolume()))
+            ? vehicle->waterSampleDuration(_sampleCapacityMl) : 0.0;
+}
+
+int SimpleMissionItem::_autoSampleCommandCount(void) const
+{
+    if (!_autoSampleEnabled || (_sampleBottle > 2) || !_isSupportedSampleCapacity(_sampleCapacityMl)) {
+        return 0;
+    }
+    Vehicle* vehicle = _masterController->managerVehicle();
+    if (vehicle == nullptr) {
+        vehicle = _masterController->controllerVehicle();
+    }
+    if ((vehicle == nullptr) || !vehicle->waterSamplingSupported() || !vehicle->waterSamplingEnabled()
+            || (_sampleCapacityMl > vehicle->waterMaxVolume())) {
+        return 0;
+    }
+    const int bottleChannel = vehicle->waterBottleChannel();
+    const int volumeChannel = vehicle->waterVolumeChannel();
+    const int triggerChannel = vehicle->waterTriggerChannel();
+    const bool validChannels = (bottleChannel >= 1) && (bottleChannel <= 16)
+                               && (volumeChannel >= 1) && (volumeChannel <= 16)
+                               && (triggerChannel >= 1) && (triggerChannel <= 16)
+                               && (bottleChannel != volumeChannel)
+                               && (bottleChannel != triggerChannel)
+                               && (volumeChannel != triggerChannel);
+    return validChannels ? kAutoSampleCommandCount : 0;
+}
+
+void SimpleMissionItem::_appendAutoSampleCommands(QList<MissionItem*>& items,
+                                                  QObject* missionItemParent,
+                                                  int& seqNum) const
+{
+    if (_autoSampleCommandCount() == 0) {
+        return;
+    }
+
+    Vehicle* vehicle = _masterController->managerVehicle();
+    if (vehicle == nullptr) {
+        vehicle = _masterController->controllerVehicle();
+    }
+    const int bottleChannel = vehicle->waterBottleChannel();
+    const int volumeChannel = vehicle->waterVolumeChannel();
+    const int triggerChannel = vehicle->waterTriggerChannel();
+    const double remainingDelay = qMax(0.0, sampleDurationSeconds() - kTriggerHoldSeconds);
+
+    const auto appendItem = [&items, missionItemParent, &seqNum](MAV_CMD command, double param1, double param2) {
+        items.append(new MissionItem(seqNum++, command, MAV_FRAME_MISSION,
+                                     param1, param2, 0, 0, 0, 0, 0,
+                                     true, false, missionItemParent));
+    };
+
+    appendItem(MAV_CMD_DO_SET_SERVO, bottleChannel, _sampleBottle == 2 ? kBottlePwmTwo : kBottlePwmOne);
+    appendItem(MAV_CMD_DO_SET_SERVO, volumeChannel, _sampleCapacityMl);
+    appendItem(MAV_CMD_DO_SET_SERVO, triggerChannel, kTriggerPwmActive);
+    appendItem(MAV_CMD_NAV_DELAY, kTriggerHoldSeconds, 0);
+    appendItem(MAV_CMD_DO_SET_SERVO, triggerChannel, kTriggerPwmIdle);
+    appendItem(MAV_CMD_NAV_DELAY, remainingDelay, 0);
 }
 
 void SimpleMissionItem::save(QJsonArray&  missionItems)
@@ -271,6 +407,11 @@ void SimpleMissionItem::save(QJsonArray&  missionItems)
                 saveObject[_jsonAltitudeModeKey] =          _altitudeFrame;
                 saveObject[_jsonAltitudeKey] =              _altitudeFact.rawValue().toDouble();
                 saveObject[_jsonAMSLAltAboveTerrainKey] =   _amslAltAboveTerrainFact.rawValue().toDouble();
+            }
+            if (_autoSampleEnabled) {
+                saveObject.insert(QString::fromLatin1(kAutoSampleEnabledKey.data(), static_cast<qsizetype>(kAutoSampleEnabledKey.size())), true);
+                saveObject.insert(QString::fromLatin1(kSampleBottleKey.data(), static_cast<qsizetype>(kSampleBottleKey.size())), _sampleBottle);
+                saveObject.insert(QString::fromLatin1(kSampleCapacityKey.data(), static_cast<qsizetype>(kSampleCapacityKey.size())), _sampleCapacityMl);
             }
         }
         missionItems.append(saveObject);
@@ -298,8 +439,28 @@ bool SimpleMissionItem::load(QTextStream &loadStream)
 
 bool SimpleMissionItem::load(const QJsonObject& json, int sequenceNumber, QString& errorString)
 {
-    if (!_missionItem.load(json, sequenceNumber, errorString)) {
+    QJsonObject missionItemJson = json;
+    const QString autoSampleEnabledKey = QString::fromLatin1(kAutoSampleEnabledKey.data(), static_cast<qsizetype>(kAutoSampleEnabledKey.size()));
+    const QString sampleBottleKey = QString::fromLatin1(kSampleBottleKey.data(), static_cast<qsizetype>(kSampleBottleKey.size()));
+    const QString sampleCapacityKey = QString::fromLatin1(kSampleCapacityKey.data(), static_cast<qsizetype>(kSampleCapacityKey.size()));
+    missionItemJson.remove(autoSampleEnabledKey);
+    missionItemJson.remove(sampleBottleKey);
+    missionItemJson.remove(sampleCapacityKey);
+    if (!_missionItem.load(missionItemJson, sequenceNumber, errorString)) {
         return false;
+    }
+
+    if (json.value(autoSampleEnabledKey).isBool()) {
+        _autoSampleEnabled = json.value(autoSampleEnabledKey).toBool();
+    }
+    if (json.value(sampleBottleKey).isDouble()) {
+        _sampleBottle = qBound(0, json.value(sampleBottleKey).toInt(), 8);
+    }
+    if (json.value(sampleCapacityKey).isDouble()) {
+        const int capacityMl = json.value(sampleCapacityKey).toInt();
+        if (_isSupportedSampleCapacity(capacityMl)) {
+            _sampleCapacityMl = capacityMl;
+        }
     }
 
     if (specifiesAltitude()) {
@@ -966,18 +1127,97 @@ void SimpleMissionItem::_possibleVehicleYawChanged(void)
     }
 }
 
-bool SimpleMissionItem::scanForSections(QmlObjectListModel* visualItems, int scanIndex, PlanMasterController* /*masterController*/)
+bool SimpleMissionItem::scanForSections(QmlObjectListModel* visualItems, int scanIndex, PlanMasterController* masterController)
 {
     bool sectionFound = false;
 
     if (_cameraSection->available()) {
         sectionFound |= _cameraSection->scanForSection(visualItems, scanIndex);
     }
-    if (_speedSection->available()) {
+    // 船只任务使用任务设置项里的全局速度。清理旧逐点速度命令时按对象查找当前项，
+    // scanIndex 指向当前项之后，不能直接用它删除，否则会删掉下一个航点。
+    const Vehicle* vehicle = masterController ? masterController->controllerVehicle() : nullptr;
+    const bool isBoat = vehicle && (vehicle->rover() || vehicle->sub() || vehicle->vehicleType() == Vehicle::MAV_TYPE_TRACK);
+    if (isBoat && !flyView()) {
+        if (command() == MAV_CMD_DO_CHANGE_SPEED) {
+            const int itemIndex = visualItems->indexOf(this);
+            if (itemIndex >= 0) {
+                visualItems->removeAt(itemIndex)->deleteLater();
+            }
+            return true;
+        }
+    } else if (_speedSection->available()) {
         sectionFound |= _speedSection->scanForSection(visualItems, scanIndex);
     }
 
+    const int itemIndex = visualItems->indexOf(this);
+    if (itemIndex >= 0) {
+        sectionFound |= _scanForAutoSampleCommands(visualItems, itemIndex + 1);
+    }
+
     return sectionFound;
+}
+
+bool SimpleMissionItem::_scanForAutoSampleCommands(QmlObjectListModel* visualItems, int scanIndex)
+{
+    if (command() != MAV_CMD_NAV_WAYPOINT) {
+        return false;
+    }
+
+    if ((scanIndex < 0) || (scanIndex + kAutoSampleCommandCount > visualItems->count())) {
+        return false;
+    }
+
+    std::array<SimpleMissionItem*, kAutoSampleCommandCount> commandItems{};
+    for (int i = 0; i < kAutoSampleCommandCount; i++) {
+        commandItems[static_cast<size_t>(i)] = visualItems->value<SimpleMissionItem*>(scanIndex + i);
+        if (!commandItems[static_cast<size_t>(i)]) {
+            return false;
+        }
+    }
+
+    const MissionItem& bottleItem = commandItems[0]->missionItem();
+    const MissionItem& volumeItem = commandItems[1]->missionItem();
+    const MissionItem& triggerItem = commandItems[2]->missionItem();
+    const MissionItem& triggerDelayItem = commandItems[3]->missionItem();
+    const MissionItem& resetItem = commandItems[4]->missionItem();
+    const MissionItem& completionDelayItem = commandItems[5]->missionItem();
+
+    const int bottleChannel = qRound(bottleItem.param1());
+    const int volumeChannel = qRound(volumeItem.param1());
+    const int triggerChannel = qRound(triggerItem.param1());
+    const int bottlePwm = qRound(bottleItem.param2());
+    const int capacityMl = qRound(volumeItem.param2());
+    const bool validChannels = (bottleChannel >= 1) && (bottleChannel <= 16)
+                               && (volumeChannel >= 1) && (volumeChannel <= 16)
+                               && (triggerChannel >= 1) && (triggerChannel <= 16)
+                               && (bottleChannel != volumeChannel)
+                               && (bottleChannel != triggerChannel)
+                               && (volumeChannel != triggerChannel);
+    const bool validSequence = (bottleItem.command() == MAV_CMD_DO_SET_SERVO)
+                               && (volumeItem.command() == MAV_CMD_DO_SET_SERVO)
+                               && (triggerItem.command() == MAV_CMD_DO_SET_SERVO)
+                               && (triggerDelayItem.command() == MAV_CMD_NAV_DELAY)
+                               && (resetItem.command() == MAV_CMD_DO_SET_SERVO)
+                               && (completionDelayItem.command() == MAV_CMD_NAV_DELAY)
+                               && ((bottlePwm == kBottlePwmOne) || (bottlePwm == kBottlePwmTwo))
+                               && _isSupportedSampleCapacity(capacityMl)
+                               && (qRound(triggerItem.param2()) == kTriggerPwmActive)
+                               && (qRound(resetItem.param1()) == triggerChannel)
+                               && (qRound(resetItem.param2()) == kTriggerPwmIdle)
+                               && qAbs(triggerDelayItem.param1() - kTriggerHoldSeconds) < 0.05
+                               && (completionDelayItem.param1() >= 0.0);
+    if (!validChannels || !validSequence) {
+        return false;
+    }
+
+    setSampleBottle(bottlePwm == kBottlePwmTwo ? 2 : 1);
+    setSampleCapacityMl(capacityMl);
+    setAutoSampleEnabled(true);
+    for (int i = 0; i < kAutoSampleCommandCount; i++) {
+        visualItems->removeAt(scanIndex)->deleteLater();
+    }
+    return true;
 }
 
 void SimpleMissionItem::_updateOptionalSections(void)
@@ -1019,7 +1259,8 @@ void SimpleMissionItem::_updateOptionalSections(void)
 
 int SimpleMissionItem::lastSequenceNumber(void) const
 {
-    return sequenceNumber() + (_cameraSection ? _cameraSection->itemCount() : 0) + (_speedSection ? _speedSection->itemCount() : 0);
+    return sequenceNumber() + (_cameraSection ? _cameraSection->itemCount() : 0)
+            + (_speedSection ? _speedSection->itemCount() : 0) + _autoSampleCommandCount();
 }
 
 void SimpleMissionItem::_updateLastSequenceNumber(void)
@@ -1043,6 +1284,7 @@ void SimpleMissionItem::appendMissionItems(QList<MissionItem*>& items, QObject* 
 
     _cameraSection->appendSectionItems(items, missionItemParent, seqNum);
     _speedSection->appendSectionItems(items, missionItemParent, seqNum);
+    _appendAutoSampleCommands(items, missionItemParent, seqNum);
 }
 
 void SimpleMissionItem::applyNewAltitude(double newAltitude)
@@ -1091,6 +1333,9 @@ void SimpleMissionItem::setAltitudeFrame(QGroundControlQmlGlobal::AltitudeFrame 
 
 double SimpleMissionItem::additionalTimeDelay(void) const
 {
+    if (_autoSampleEnabled) {
+        return (_autoSampleCommandCount() > 0) ? sampleDurationSeconds() : 0.0;
+    }
     switch (command()) {
     case MAV_CMD_NAV_WAYPOINT:
     case MAV_CMD_CONDITION_DELAY:

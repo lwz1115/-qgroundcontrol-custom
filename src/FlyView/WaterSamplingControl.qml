@@ -95,12 +95,24 @@ Item {
     /// 可选容量（数字固定，单位统一用 ML / L，不随语言翻译）
     readonly property var _capacityOptions: [
         { ml: 500,  label: qsTr("500 ml") },
-        { ml: 1000, label: qsTr("1 L") },
-        { ml: 1500, label: qsTr("1.5 L") },
-        { ml: 2000, label: qsTr("2 L") }
+        { ml: 1000, label: qsTr("1000 ml") },
+        { ml: 2500, label: qsTr("2500 ml") },
+        { ml: 5000, label: qsTr("5000 ml") }
     ]
     /// 抽水秒数 = 容量 ÷ 流速
     readonly property real _pumpSeconds:   control._selectedCapacityMl / control._flowRate
+
+    /// 一次完整采样的预估总时长（s）：放杆 + 抽水 + 关泵延时 + 收杆，再加 10 s 余量。
+    /// 阶段消息若在到达“收杆”之前就丢了（stage 5 永远不来），收杆兜底定时器不会启动，
+    /// 界面就会永久停在“采样中”、开始按钮全部禁用。这条总时长兜底保证到点必定解锁。
+    readonly property int _totalTimeoutMs: Math.ceil(
+        (control._openTime + control._pumpSeconds + control._closeDelay + control._closeTime + 10) * 1000)
+
+    /// 自动采样时的兜底总时长：任务里设置的采样容量 QML 侧不知道（可能比面板选择大），
+    /// 用船体支持的最大容量（WS_MAX_VOLUME）保守估时，避免兜底比真实流程先到。
+    readonly property int _autoTotalTimeoutMs: Math.ceil(
+        (control._openTime + control._maxCapacityMl / control._flowRate
+         + control._closeDelay + control._closeTime + 10) * 1000)
 
     /// 采样流程状态：**完全由飞控的 STATUSTEXT 驱动**，QGC 不再本地估算时序。
     /// _stage 的数值与 Vehicle::WaterSamplingStage 一一对应（0=空闲 … 6=完成）。
@@ -199,6 +211,7 @@ Item {
     /// 本次采样结束：解锁界面，允许下一次点击
     function _completeSampling() {
         _fcDoneFallback.stop()
+        _totalTimeout.stop()
         _pumpTimer.stop()
         _finished = true
         _pumpElapsed = 0
@@ -207,6 +220,7 @@ Item {
     /// 回到空闲（飞控端流程无法从外部中止，只能重置界面）
     function _abortLocalCountdown() {
         _fcDoneFallback.stop()
+        _totalTimeout.stop()
         _pumpTimer.stop()
         _finished = false
         _pumpElapsed = 0
@@ -258,6 +272,11 @@ Item {
         _finished = false
         _pumpElapsed = 0
 
+        // 总时长兜底：覆盖“阶段消息在中途丢失、永远到不了收杆阶段”的情况，
+        // 到点无条件解锁，避免开始按钮被永久禁用。
+        _totalTimeout.interval = control._totalTimeoutMs
+        _totalTimeout.restart()
+
         // 只负责发命令；阶段与进度完全由飞控的 STATUSTEXT 驱动，QGC 不再本地估算时序
         _activeVehicle.requestWaterSample(_selectedBottle, _selectedCapacityMl)
     }
@@ -282,6 +301,18 @@ Item {
             control._completeSampling()
             QGroundControl.showMessageDialog(control, qsTr("Water Sampling"),
                 qsTr("The vehicle did not report sampling completion in time."), Dialog.Ok)
+        }
+    }
+
+    /// 总时长兜底：开始采样时启动，覆盖“阶段消息在中途丢失、永远到不了收杆阶段”。
+    /// 到点只解锁界面、不弹错误框——此时机构到底停在哪一步无法得知，弹框只会误导；
+    /// 静默解锁让用户能重新发起一次采样（飞控侧非空闲态会忽略新的触发边沿）。
+    Timer {
+        id:       _totalTimeout
+        repeat:   false
+
+        onTriggered: {
+            control._completeSampling()
         }
     }
 
@@ -503,6 +534,12 @@ Item {
         }
     }
 
+    Component.onCompleted: {
+        if (_stage > 0) {
+            controlPopup.open()
+        }
+    }
+
     // ------------------------------------------------------------------
     // Connections（按 QGC 规范放在可视子项之后）
     // ------------------------------------------------------------------
@@ -527,11 +564,26 @@ Item {
         target: control._activeVehicle
 
         function onWaterSamplingStarted() {
-            // 本地计时在 _startSampling 里已乐观启动，确认后无需额外处理
+            // 手动启动时面板已经打开；任务航点自动采样时也自动展开同一进度面板。
+            controlPopup.open()
+            // 自动采样同样需要总时长兜底（手动采样已在 _startSampling 里启动）：
+            // 阶段消息中途丢失时到点自动解锁，避免界面永久卡在“采样中”。
+            if (!_totalTimeout.running) {
+                _totalTimeout.interval = control._autoTotalTimeoutMs
+                _totalTimeout.restart()
+            }
         }
 
         function onWaterSamplingStageChanged() {
             control._onStageChanged()
+            if (control._stage > 0) {
+                controlPopup.open()
+                // 阶段信号先于 waterSamplingStarted 到达（或该信号漏发）时兜底启动
+                if (!_totalTimeout.running && !control._finished) {
+                    _totalTimeout.interval = control._autoTotalTimeoutMs
+                    _totalTimeout.restart()
+                }
+            }
         }
 
         function onWaterSamplingCompleted() {

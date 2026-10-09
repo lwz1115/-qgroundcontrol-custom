@@ -95,6 +95,14 @@ void VisualMissionItem::setDistanceFromStart(double distanceFromStart)
     }
 }
 
+void VisualMissionItem::setMissionItemNumber(int missionItemNumber)
+{
+    if (_missionItemNumber != missionItemNumber) {
+        _missionItemNumber = missionItemNumber;
+        emit missionItemNumberChanged(_missionItemNumber);
+    }
+}
+
 void VisualMissionItem::setAltDifference(double altDifference)
 {
     if (!QGC::fuzzyCompare(_altDifference, altDifference)) {

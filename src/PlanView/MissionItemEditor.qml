@@ -292,7 +292,7 @@ Rectangle {
                     }
 
                     QGCLabel {
-                        text:       qsTr("Item #%1").arg(missionItem.sequenceNumber)
+                        text:       qsTr("Item #%1").arg(missionItem.missionItemNumber > 0 ? missionItem.missionItemNumber : missionItem.sequenceNumber)
                         enabled:    false
                     }
                 }

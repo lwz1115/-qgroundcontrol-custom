@@ -1322,9 +1322,15 @@ void MissionController::_recalcSequence(void)
 
     _inRecalcSequence = true;
     int sequenceNumber = 0;
+    int missionItemNumber = 0;
     for (int i=0; i<_visualItems->count(); i++) {
         VisualMissionItem* item = qobject_cast<VisualMissionItem*>(_visualItems->get(i));
         item->setSequenceNumber(sequenceNumber);
+        if ((i > 0) && item->specifiesCoordinate() && !item->isStandaloneCoordinate()) {
+            item->setMissionItemNumber(++missionItemNumber);
+        } else {
+            item->setMissionItemNumber(-1);
+        }
         sequenceNumber = item->lastSequenceNumber() + 1;
     }
     _inRecalcSequence = false;
@@ -1687,6 +1693,10 @@ void MissionController::_initVisualItem(VisualMissionItem* visualItem)
         // We need to track commandChanged on simple item since recalc has special handling for takeoff command
         SimpleMissionItem* simpleItem = qobject_cast<SimpleMissionItem*>(visualItem);
         if (simpleItem) {
+            if (_managerVehicle) {
+                connect(_managerVehicle, &Vehicle::waterSamplingParamsChanged,
+                        simpleItem, &SimpleMissionItem::sampleConfigurationChanged, Qt::UniqueConnection);
+            }
             connect(&simpleItem->missionItem()._commandFact, &Fact::valueChanged, this, &MissionController::_itemCommandChanged);
             // The altitude frame drives segmentTypeForPair, and segment type is immutable once created
             connect(simpleItem, &SimpleMissionItem::altitudeFrameChanged, this,
@@ -1725,6 +1735,13 @@ void MissionController::_itemCommandChanged(void)
 void MissionController::_managerVehicleChanged(Vehicle* managerVehicle)
 {
     if (_managerVehicle) {
+        for (int i = 0; i < _visualItems->count(); i++) {
+            SimpleMissionItem* simpleItem = _visualItems->value<SimpleMissionItem*>(i);
+            if (simpleItem) {
+                disconnect(_managerVehicle, &Vehicle::waterSamplingParamsChanged,
+                           simpleItem, &SimpleMissionItem::sampleConfigurationChanged);
+            }
+        }
         _missionManager->disconnect(this);
         _managerVehicle->disconnect(this);
         _managerVehicle = nullptr;
@@ -1749,8 +1766,19 @@ void MissionController::_managerVehicleChanged(Vehicle* managerVehicle)
     connect(_missionManager, &MissionManager::resumeMissionUploadFail,  this, &MissionController::resumeMissionUploadFail);
     connect(_managerVehicle, &Vehicle::defaultCruiseSpeedChanged,       this, &MissionController::_recalcMissionFlightStatusSignal, Qt::QueuedConnection);
     connect(_managerVehicle, &Vehicle::defaultHoverSpeedChanged,        this, &MissionController::_recalcMissionFlightStatusSignal, Qt::QueuedConnection);
+    connect(_managerVehicle, &Vehicle::waterSamplingParamsChanged,      this, &MissionController::_recalcSequence);
+    connect(_managerVehicle, &Vehicle::waterSamplingParamsChanged,      this, &MissionController::_recalcMissionFlightStatusSignal, Qt::QueuedConnection);
     connect(_managerVehicle, &Vehicle::vehicleTypeChanged,              this, &MissionController::complexMissionItemsChanged);
 
+    for (int i = 0; i < _visualItems->count(); i++) {
+        SimpleMissionItem* simpleItem = _visualItems->value<SimpleMissionItem*>(i);
+        if (simpleItem) {
+            connect(_managerVehicle, &Vehicle::waterSamplingParamsChanged,
+                    simpleItem, &SimpleMissionItem::sampleConfigurationChanged, Qt::UniqueConnection);
+        }
+    }
+
+    _recalcSequence();
     emit complexMissionItemsChanged();
     emit resumeMissionIndexChanged();
 }
@@ -1906,12 +1934,24 @@ void MissionController::_scanForAdditionalSettings(QmlObjectListModel* visualIte
                 settingsItem->scanForMissionSettings(visualItems, scanIndex);
                 continue;
             }
+        } else {
+            // 循环次数已在接收任务后由 _updateLoopCountFromMissionItems 从 DO_JUMP 恢复。
+            // 这里继续扫描任务设置项中的相机与全局速度命令。
+            MissionSettingsItem* settingsItem = qobject_cast<MissionSettingsItem*>(visualItem);
+            if (settingsItem) {
+                scanIndex++;
+                settingsItem->scanForMissionSettings(visualItems, scanIndex);
+                continue;
+            }
         }
 
         SimpleMissionItem* simpleItem = qobject_cast<SimpleMissionItem*>(visualItem);
         if (simpleItem) {
+            const int currentVisualIndex = scanIndex;
             scanIndex++;
             simpleItem->scanForSections(visualItems, scanIndex, masterController);
+            const int currentIndexAfterScan = visualItems->indexOf(simpleItem);
+            scanIndex = (currentIndexAfterScan >= 0) ? currentIndexAfterScan + 1 : currentVisualIndex;
         } else {
             // Complex item, can't have sections
             scanIndex++;

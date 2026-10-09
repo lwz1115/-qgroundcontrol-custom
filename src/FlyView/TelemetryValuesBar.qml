@@ -42,46 +42,48 @@ Item {
             return null
         }
         const seq = mc.currentMissionIndex
+        let firstCoordinateItem = null
         let lastCoordinateItem = null
-        for (let i = 0; i < mc.visualItems.count; i++) {
+        let nextCoordinateItem = null
+        let currentIsDoJump = false
+        // 从 index 1 开始：index 0 是 MissionSettingsItem（planned home 位置），
+        // 它的 specifiesCoordinate 也是 true，若纳入会把 HOME 当成第 1 个航点，序号错乱。
+        for (let i = 1; i < mc.visualItems.count; i++) {
             const item = mc.visualItems.get(i)
-            if (!item || !item.specifiesCoordinate) {
+            if (!item) {
                 continue
+            }
+            if (item.sequenceNumber === seq && item.command === MAVLinkEnums.MAV_CMD_DO_JUMP) {
+                currentIsDoJump = true
+            }
+            if (!item.specifiesCoordinate) {
+                continue
+            }
+            if (!firstCoordinateItem) {
+                firstCoordinateItem = item
             }
             lastCoordinateItem = item
             if (item.sequenceNumber === seq) {
                 return item
             }
+            if (!nextCoordinateItem && item.sequenceNumber > seq) {
+                nextCoordinateItem = item
+            }
         }
-        // MISSION_CURRENT 指向 DO_JUMP 等非坐标项时退回最后一个坐标航点
-        return lastCoordinateItem
-    }
-
-    /// 剩余任务距离（m）。
-    /// 只算 planned - current.distanceFromStart 会让数值在“到达航点”时才跳变（MISSION_CURRENT 到点才更新），
-    /// 两航点之间完全不动。这里再加上“船当前位置到当前航点”的实时距离，船在航段中间移动时剩余连续减小，
-    /// 到达当前航点时该项归零，MISSION_CURRENT 跳下一个航点，数值保持连续。
-    readonly property real _missionRemainingDistance: {
-        const mc = control._flyMissionController
-        const item = control._activeMissionItem
-        if (!mc || !item) {
-            return NaN
+        // 任务还没开始（MISSION_CURRENT 停在 home/设置项，序号小于第一个航点）：
+        // 返回第一个航点，此时剩余距离 = 全任务距离，并含“当前位置到第一个航点”的路程
+        if (seq <= (firstCoordinateItem ? firstCoordinateItem.sequenceNumber : 0)) {
+            return firstCoordinateItem
         }
-        const planned = Number(mc.missionPlannedDistance)
-        const flown = Number(item.distanceFromStart)
-        if (isNaN(planned)) {
-            return NaN
+        // DO_JUMP 的目标是循环起点；其他非坐标命令之后，目标为序号更大的首个坐标项。
+        if (currentIsDoJump) {
+            if ((control._totalLoops !== null)
+                    && (control._completedLoops >= Number(control._totalLoops))) {
+                return lastCoordinateItem
+            }
+            return firstCoordinateItem
         }
-        if (isNaN(flown)) {
-            return planned
-        }
-        const vehicle = control._vehicle
-        let toCurrent = 0
-        if (vehicle && vehicle.coordinate && item.coordinate && item.coordinate.isValid) {
-            const d = vehicle.coordinate.distanceTo(item.coordinate)
-            toCurrent = isNaN(d) ? 0 : d
-        }
-        return Math.max(0, planned - flown + toCurrent)
+        return nextCoordinateItem || lastCoordinateItem
     }
 
     /// 当前航点之后所有采样停留时间（s）：真实预算要把停留也加进去
@@ -91,6 +93,10 @@ Item {
             return 0
         }
         const current = control._activeMissionItem
+        if ((control._totalLoops !== null)
+                && (control._completedLoops >= Number(control._totalLoops))) {
+            return 0
+        }
         let pastCurrent = !current
         let total = 0
         for (let i = 0; i < mc.visualItems.count; i++) {
@@ -98,13 +104,15 @@ Item {
             if (!item) {
                 continue
             }
+            if (!pastCurrent && item === current) {
+                pastCurrent = true
+            }
             if (!pastCurrent) {
-                if (item === current) {
-                    pastCurrent = true
-                }
                 continue
             }
-            if (item.isSimpleItem && item.holdTimeFact) {
+            if (item.autoSampleEnabled) {
+                total += Number(item.sampleDurationSeconds)
+            } else if (item.isSamplePoint && item.holdTimeFact) {
                 const hold = Number(item.holdTimeFact.value)
                 if (!isNaN(hold) && hold > 0) {
                     total += hold
@@ -114,18 +122,159 @@ Item {
         return total
     }
 
-    /// 任务预估剩余时间：剩余距离 / 用户设置的真实速度 + 剩余停留时间，格式与上方 Time 一致 HH:MM:SS
-    /// 到最后一个航点且剩余距离已小于 1 米时归零（显示 00:00:00），避免残余的小距离让时间停留在 00:01 之类。
+    /// 一整圈的全部采样停留时间（s）：剩余圈数 × 这个值 = 后续整圈的停留预算。
+    readonly property real _singleLoopHoldSeconds: {
+        const mc = control._flyMissionController
+        if (!mc || !mc.visualItems) {
+            return 0
+        }
+        let total = 0
+        for (let i = 1; i < mc.visualItems.count; i++) {
+            const item = mc.visualItems.get(i)
+            if (item && item.autoSampleEnabled) {
+                total += Number(item.sampleDurationSeconds)
+            } else if (item && item.isSamplePoint && item.holdTimeFact) {
+                const hold = Number(item.holdTimeFact.value)
+                if (!isNaN(hold) && hold > 0) {
+                    total += hold
+                }
+            }
+        }
+        return total
+    }
+
+    /// 从当前位置沿任务航线到末航点的剩余距离（m），不依赖累计 distanceFromStart，
+    /// 因为该累计值只对应第一圈，后续循环回到首航点后会给出错误结果。
+    readonly property real _remainingThisLoopDistance: {
+        const mc = control._flyMissionController
+        const items = mc ? mc.visualItems : null
+        const current = control._activeMissionItem
+        if (!items || !current) {
+            return NaN
+        }
+        const vehicle = control._vehicle
+        if (!vehicle || !vehicle.coordinate || !current.entryCoordinate || !current.entryCoordinate.isValid) {
+            return NaN
+        }
+        let total = vehicle.coordinate.distanceTo(current.entryCoordinate)
+        if (!isNaN(current.complexDistance)) {
+            total += Number(current.complexDistance)
+        }
+        let previousExit = current.exitCoordinate
+        let currentIndex = -1
+        for (let i = 1; i < items.count; i++) {
+            if (items.get(i) === current) {
+                currentIndex = i
+                break
+            }
+        }
+        for (let i = currentIndex + 1; i < items.count; i++) {
+            const item = items.get(i)
+            if (!item || !item.specifiesCoordinate || item.isStandaloneCoordinate) {
+                continue
+            }
+            if (previousExit && previousExit.isValid && item.entryCoordinate && item.entryCoordinate.isValid) {
+                total += previousExit.distanceTo(item.entryCoordinate)
+            }
+            if (!item.isSimpleItem && !isNaN(item.complexDistance)) {
+                total += Number(item.complexDistance)
+            }
+            previousExit = item.exitCoordinate
+        }
+        return isNaN(total) ? NaN : Math.max(0, total)
+    }
+
+    /// DO_JUMP 从末航点回到首航点的闭环距离；QGC 的规划距离不包含这段跳转。
+    readonly property real _loopReturnDistance: {
+        const items = control._flyMissionController ? control._flyMissionController.visualItems : null
+        if (!items) {
+            return 0
+        }
+        let first = null
+        let last = null
+        for (let i = 1; i < items.count; i++) {
+            const item = items.get(i)
+            if (item && item.specifiesCoordinate && !item.isStandaloneCoordinate) {
+                if (!first) {
+                    first = item
+                }
+                last = item
+            }
+        }
+        if (!first || !last || first === last || !first.entryCoordinate.isValid || !last.exitCoordinate.isValid) {
+            return 0
+        }
+        const distance = last.exitCoordinate.distanceTo(first.entryCoordinate)
+        return isNaN(distance) ? 0 : distance
+    }
+
+    /// 每个完整后续循环的距离，不含 HOME 到首航点的单次起航段。
+    readonly property real _singleLoopDistance: {
+        const mc = control._flyMissionController
+        const items = mc ? mc.visualItems : null
+        if (!mc || !items) {
+            return 0
+        }
+        let first = null
+        for (let i = 1; i < items.count; i++) {
+            const item = items.get(i)
+            if (item && item.specifiesCoordinate && !item.isStandaloneCoordinate) {
+                first = item
+                break
+            }
+        }
+        const planned = Number(mc.missionPlannedDistance)
+        const initialLeg = first ? Number(first.distance) : 0
+        if (isNaN(planned) || isNaN(initialLeg)) {
+            return 0
+        }
+        return Math.max(0, planned - initialLeg) + control._loopReturnDistance
+    }
+
+    /// 全部任务剩余时间（s）：
+    /// 当前圈剩余距离/速度 + 剩余整圈数 × (单圈距离/速度 + 单圈停留) + 当前圈剩余停留。
+    /// - 剩余整圈数 = 总圈数 - 已完成圈数 - 1（正在飞的是当前圈，算进“当前圈剩余”里）
+    /// - 跳转航点（DO_JUMP）跳回起点：跳过的不产生额外飞行距离，所以后续整圈的距离按
+    ///   单圈总距离重复累加即可；跳转本身不增加停留。
+    readonly property real _missionRemainingSeconds: {
+        const speed = control._autonomousNavSpeed
+        if (!speed) {
+            return NaN
+        }
+        const thisLoopDist = control._remainingThisLoopDistance
+        if (isNaN(thisLoopDist)) {
+            return NaN
+        }
+        const singleLoopDist = control._singleLoopDistance
+        if (isNaN(singleLoopDist)) {
+            return NaN
+        }
+        const totalLoops = control._totalLoops
+        // 剩余整圈数：拿不到总圈数时保守当作“至少还有当前圈”，不额外累加整圈。
+        // 用 Math.max(0, …) 兜住“已完成圈数已经超过总圈数”的抖动（重连、任务重载时可能出现），
+        // 否则会算出负的整圈数把剩余时间压成一段航程——表现为一到末航点剩余时间就塌缩。
+        const fullLoopsRemaining = (totalLoops === null)
+                ? 0
+                : Math.max(0, Math.ceil(Number(totalLoops)) - control._completedLoops - 1)
+
+        let seconds = thisLoopDist / speed
+        seconds += control._missionRemainingHoldSeconds
+        seconds += fullLoopsRemaining * (singleLoopDist / speed + control._singleLoopHoldSeconds)
+        return Math.max(0, seconds)
+    }
+
+    /// 任务预估剩余时间：全部循环 + 跳转 + 采样停留都算进去，格式 HH:MM:SS。
+    /// 到终点（剩余距离 < 1 米）时归零显示 00:00:00。
     readonly property string _missionRemainingText: {
         const speed = control._autonomousNavSpeed
-        const dist = control._missionRemainingDistance
+        const dist = control._remainingThisLoopDistance
         if (!speed || isNaN(dist)) {
             return "--"
         }
-        if (dist < 1.0) {
+        if (dist < 1.0 && control._missionRemainingSeconds < 1.0) {
             return "00:00:00"
         }
-        const total = Math.max(0, Math.floor(dist / speed + control._missionRemainingHoldSeconds))
+        const total = Math.floor(control._missionRemainingSeconds)
         const h = Math.floor(total / 3600)
         const m = Math.floor((total % 3600) / 60)
         const sec = total % 60
@@ -194,7 +343,8 @@ Item {
         }
         let doJumpIndex = -1
         let lastWaypointIndex = -1
-        for (let i = 0; i < items.count; i++) {
+        // 从 index 1 开始：index 0 是 MissionSettingsItem（planned home），不是航点
+        for (let i = 1; i < items.count; i++) {
             const item = items.get(i)
             if (!item) {
                 continue
@@ -231,7 +381,8 @@ Item {
             return -1
         }
         let lastWaypointIndex = -1
-        for (let i = 0; i < items.count; i++) {
+        // 从 index 1 开始：index 0 是 MissionSettingsItem（planned home），不是航点
+        for (let i = 1; i < items.count; i++) {
             const item = items.get(i)
             if (item && !control._isDoJumpItem(item) && item.specifiesCoordinate) {
                 lastWaypointIndex = item.sequenceNumber
@@ -245,7 +396,9 @@ Item {
     property bool   _loopRunActive:    false  ///< 本趟是否已起步：起步后才允许计圈
     property bool   _taskCompleted:    false  ///< 本趟任务已跑满总圈数并结束（无 UI 提示，仅供上传拦截使用）
     property string _loopMissionKey:   ""     ///< 本趟任务的特征（起点/终点/总圈数），用来识别“任务是否被替换”
-
+    property int    _stationaryRetries: 0     ///< 完成确认时连续判为“未停稳”的次数
+    property int    _reachedMaxIndex: -1      ///< 本趟已飞到的最大序号：防止同一圈被序号抖动重复计圈
+    property bool   _loopEndArmed:   false    ///< 本趟已到达末尾锚点（DO_JUMP 或末航点）：只有到达过末尾才允许计圈
     /// 总圈数（船上已生效值），可能为 null（拿不到时仍计圈，但不判定完成）
     readonly property var _totalLoops: control._missionLoopCount
 
@@ -254,6 +407,10 @@ Item {
 
     /// 停稳判定阈值（m/s）：低于此速度视为停稳
     readonly property real _stationarySpeedThreshold: 0.5
+
+    /// 完成确认时最多容忍多少次“仍在移动”：超过就强制判定完成。
+    /// 8 秒一次 × 6 次 ≈ 48 秒，足够慢速船停稳；再久就是永远停不下来，不能再等。
+    readonly property int _stationaryConfirmMaxRetries: 6
 
     /// 任务运行中：已解锁 + 处于任务模式。
     /// 与 MissionController::sendToVehiclePreCheck 的 armed+missionFlightMode 判定保持一致，两处若改动需同步。
@@ -291,6 +448,9 @@ Item {
         _lastMissionIndex = -1
         _loopRunActive = false
         _taskCompleted = false
+        _stationaryRetries = 0
+        _reachedMaxIndex = -1
+        _loopEndArmed = false
         _loopMissionKey = control._loopMissionKeyOf()
         completeConfirmTimer.stop()
         control._publishTaskState()
@@ -321,6 +481,12 @@ Item {
         // 序号一变说明船还在动，取消上一次的完成确认
         completeConfirmTimer.stop()
 
+        // 本趟已经飞到的最大序号：与末航点序号一起用来判断“这一圈是不是真的跑完了”。
+        // 不拿它当计圈的必要条件——有些固件不上报 DO_JUMP 的序号，用它做硬性门槛会一圈都不加。
+        if (missionIndex > _reachedMaxIndex) {
+            _reachedMaxIndex = missionIndex
+        }
+
         if (!_loopRunActive) {
             if (missionIndex >= _loopStartIndex) {
                 _resetLoopProgress()
@@ -331,24 +497,34 @@ Item {
             _resetLoopProgress()
             _loopRunActive = true
             control._publishTaskState()
-        } else if ((missionIndex === _loopEndIndex) && (_lastMissionIndex !== _loopEndIndex)) {
-            // 到达末尾 DO_JUMP：这一圈完成
-            control._completeOneLoop()
-        } else if ((missionIndex === _loopStartIndex) && (_lastMissionIndex > _loopStartIndex) && (_lastMissionIndex !== _loopEndIndex)) {
-            // 从航尾直接回到起点：与“DO_JUMP 已执行”是同一件事，计一圈
+        } else if ((missionIndex === _loopStartIndex) && (_lastMissionIndex > _loopStartIndex) && _loopEndArmed) {
+            // 回到起点：这一圈真正结束了（跑过末尾锚点才计，见下方 armed 置位）。
+            // 手动“跳转航点”回到首航点也会走到这：它不代表跑完一圈，必须用
+            // _loopEndArmed（本趟真到过末尾）拦掉，否则 _completedLoops 虚增、
+            // 剩余时间会凭空少一整圈。
+            _loopEndArmed = false
             control._completeOneLoop()
         } else if ((missionIndex === _loopLastWaypointIndex) && (_lastMissionIndex !== _loopLastWaypointIndex)) {
             // 末圈跑到最后一个航点后停住：等完成确认
             control._armFinalConfirm()
-        } else if ((_loopLastWaypointIndex >= 0) && (_totalLoops !== null) && (_completedLoops === (_totalLoops - 1)) && (missionIndex > _loopLastWaypointIndex)) {
+        } else if ((_loopLastWaypointIndex >= 0) && (_totalLoops !== null) && (_completedLoops === (_totalLoops - 1)) && (missionIndex > _loopLastWaypointIndex) && !_taskCompleted) {
             // 末圈后任务越过最后一个坐标航点（返回 HOME / 结束动作，序号比最后航点还大）：
             // 只有 DO_JUMP 跳次耗尽才会走到这里，说明末圈真的跑完了。
             // 此前末圈靠“序号停在终点”的定时器确认，一旦执行返回 HOME 序号会继续往前走、
             // 定时器被取消，所以这里直接把末圈补上并判完成。
+            // !_taskCompleted 是幂等闸：返回 HOME 过程中序号每进一步都会走到这个分支，
+            // 没有它就会把圈数反复 +1，剩余时间随之塌缩。
             control._handleTaskConfirmed()
         } else if (!_taskCompleted && (_totalLoops !== null) && (_completedLoops >= _totalLoops)) {
             // 圈数已满但还没确认完成（单次任务到达终点却仍在上报序号）：序号稳定后即确认
             completeConfirmTimer.restart()
+        }
+
+        // 到达“末尾 DO_JUMP”或“最后一个坐标航点”都视为本圈真正跑到了尾，
+        // 置位后下一圈“回到起点”分支才能计圈。末圈返回 HOME 的序号不经过末尾锚点，
+        // 由上面的返回 HOME 分支直接处理，不走这里。
+        if ((missionIndex === _loopEndIndex) || (missionIndex === _loopLastWaypointIndex)) {
+            _loopEndArmed = true
         }
 
         _lastMissionIndex = missionIndex
@@ -359,6 +535,12 @@ Item {
     ///   · 单次任务（无 DO_JUMP，锚点是坐标航点）→ 序号只是“开始前往终点”就上报，
     ///     不能立即判定完成，交给完成确认定时器等序号稳定后再判定
     function _completeOneLoop() {
+        // 幂等：同一圈只计一次。任务末尾返回 HOME / RTL 时序号会继续递增，
+        // 若没有这道闸，已计满的圈会被反复 +1，剩余时间里的“剩余整圈数”被压成 0，
+        // 表现为每次飞往末航点时剩余时间塌缩成只剩这一段航程。
+        if (_taskCompleted) {
+            return
+        }
         _completedLoops++
         if ((_totalLoops === null) || (_completedLoops < _totalLoops)) {
             return
@@ -387,13 +569,34 @@ Item {
     // 注：停船/保位/切动力/上报 COMPLETED 由飞控负责（DO_JUMP 跳次耗尽后不再跳回）；
     // 若某些固件需要 QGC 主动下发 HOLD/暂停命令，可在这个函数里补（飞控端需配合上报 COMPLETED）。
     function _handleTaskConfirmed() {
+        // 幂等：已经判完成就不再补圈。任务末尾的返回 HOME / RTL 会让序号持续递增，
+        // 分支 e 与完成确认定时器都可能重复调到它。
+        if (_taskCompleted) {
+            return
+        }
         // 只有停稳后才确认完成：单次任务没有 DO_JUMP 时，MISSION_CURRENT 在“开始前往终点”就上报，
         // 慢速船这时往往还在半路，光靠 8 秒定时器会提前判完成。仍在移动就继续等，慢速船不会误判。
+        // 连续多次仍判为“未停稳”（水流/风推着船，或 GPS 速度噪声）时：
+        //   · 船已到过末航点（_reachedMaxIndex 已覆盖）→ 判定任务确实结束，强制确认，
+        //     否则定时器会无限自我重启，任务永远判不了完成，missionTaskRunning 一直为真，
+        //     规划界面会一直拦着“任务执行中，不能下发新任务”。
+        //   · 还没到过末航点（任务中途）→ 不能靠地速噪声把任务提前判完成，继续等停稳。
         const vehicle = control._vehicle
         const groundSpeedFact = vehicle ? vehicle.vehicle.groundSpeed : null
         if (groundSpeedFact && (groundSpeedFact.value > control._stationarySpeedThreshold)) {
-            completeConfirmTimer.restart()
-            return
+            _stationaryRetries++
+            if (_stationaryRetries < control._stationaryConfirmMaxRetries) {
+                completeConfirmTimer.restart()
+                return
+            }
+            // 重试耗尽仍“未停稳”：只有任务已到达末航点才强制确认完成
+            if (_reachedMaxIndex < control._loopLastWaypointIndex) {
+                completeConfirmTimer.restart()
+                return
+            }
+            _stationaryRetries = 0
+        } else {
+            _stationaryRetries = 0
         }
         if ((_totalLoops !== null) && (_completedLoops < _totalLoops)) {
             _completedLoops++

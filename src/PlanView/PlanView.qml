@@ -196,7 +196,8 @@ Item {
             if (distance < minSpacing) {
                 QGroundControl.showMessageDialog(mainWindow, qsTr("Add Sample Point"),
                                                  qsTr("Too close to sample point #%1 (%2 m). Minimum spacing is %3 m.")
-                                                     .arg(item.sequenceNumber).arg(distance.toFixed(1)).arg(minSpacing))
+                                                     .arg(item.missionItemNumber > 0 ? item.missionItemNumber : item.sequenceNumber)
+                                                     .arg(distance.toFixed(1)).arg(minSpacing))
                 return
             }
         }
@@ -543,7 +544,7 @@ Item {
                     ToolStripAction {
                         objectName: "planToolStrip_speedButton"
                         text: qsTr("Speed")
-                        iconSource: "/res/waypoint.svg"
+                        iconSource: "/res/speedometer.svg"
                         enabled: _missionController.flyThroughCommandsAllowed
                         visible: toolStrip._isMissionLayer
                         dropPanelComponent: speedDropPanel
@@ -871,23 +872,41 @@ Item {
                 onClicked: {
                     // 直接读输入框文本（不依赖失焦才写入 fact.value），
                     // 否则用户输入后不回车直接点确定可能取到旧值
-                    const speed = parseFloat(speedInput.text)
-                    if (isNaN(speed) || speed <= 0) {
+                    const speedFact = QGroundControl.settingsManager.appSettings.autonomousNavSpeed
+                    const enteredSpeed = parseFloat(speedInput.text)
+                    if (isNaN(enteredSpeed) || enteredSpeed <= 0) {
                         return
                     }
-                    speedInput.fact.value = speed
+                    // Fact 的 value/rawValue 写入不校验 userMax（setRawValue 只转换类型），
+                    // 手动输入超上限的值也要显式钳制到 5 m/s，否则记忆值和面板显示会失控
+                    const speed = Math.min(enteredSpeed, speedFact.userMax)
                     QGroundControl.showMessageDialog(_root, qsTr("Set Speed"),
-                        qsTr("Apply %1 m/s to all waypoints? The boat moves at this speed after upload.")
+                        qsTr("Apply %1 m/s to the mission? The boat moves at this speed after upload.")
                             .arg(speed),
                         Dialog.Yes | Dialog.Cancel,
                         function() {
+                            // 记忆值在确认之后才落盘：放在弹框前写，用户点“取消”也会把
+                            // 上次速度改掉，出现“记忆值是新值、当前任务还是旧值”的不一致。
+                            // 新建任务/重启 QGC 时 SpeedSection 构造会读它作为初始值，
+                            // 因此设成 2 之后一直默认是 2，直到下一次改速度并上传。
+                            speedFact.value = speed
+                            // 全局速度挂在任务设置项（index 0，MissionSettingsItem）上：
+                            // 它的 appendMissionItems 会在 home 之后、所有航点之前插入一条
+                            // MAV_CMD_DO_CHANGE_SPEED，对整条任务（含起点到第一个航点的路程）
+                            // 持续生效。若在航点上插速度命令，子命令会占掉序号（3 个航点显示 1/3/5）。
+                            const settingsItem = _missionController.visualItems.get(0)
+                            if (settingsItem && settingsItem.speedSection) {
+                                settingsItem.speedSection.specifyFlightSpeed = true
+                                settingsItem.speedSection.flightSpeed.rawValue = speed
+                            }
+                            // 清掉所有航点上残留的速度子命令（防止旧任务里的逐点速度命令再次占号）
                             const items = _missionController.visualItems
-                            for (let i = 0; i < items.count; i++) {
+                            for (let i = 1; i < items.count; i++) {
                                 const item = items.get(i)
-                                if (item && item.isSimpleItem === true && item.speedSection && item.speedSection.available) {
-                                    item.speedSection.specifyFlightSpeed = true
-                                    item.speedSection.flightSpeed.rawValue = speed
+                                if (!item || item.isSimpleItem !== true || !item.speedSection) {
+                                    continue
                                 }
+                                item.speedSection.specifyFlightSpeed = false
                             }
                             dropPanel.hide()
                         })

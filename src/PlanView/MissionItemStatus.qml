@@ -86,7 +86,7 @@ Rectangle {
                 small:                      true
                 checked:                    object.isCurrentItem
                 label:                      object.abbreviation.charAt(0)
-                index:                      object.abbreviation.charAt(0) > 'A' && object.abbreviation.charAt(0) < 'z' ? -1 : object.sequenceNumber
+                index:                      object.abbreviation.charAt(0) > 'A' && object.abbreviation.charAt(0) < 'z' ? -1 : object.missionItemNumber
                 showSequenceNumbers:        false
             }
 
@@ -104,7 +104,7 @@ Rectangle {
             QGCLabel {
                 id:                 indexLabel
                 anchors.centerIn:   parent
-                text:               object.sequenceNumber
+                text:               object.missionItemNumber
                 visible:            indicator.index != -1
                 transform:          Rotation { angle: 90; origin.x: indexLabel.width / 2; origin.y: indexLabel.height / 2 }
             }

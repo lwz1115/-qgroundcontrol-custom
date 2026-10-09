@@ -47,7 +47,7 @@ MissionSettingsItem::MissionSettingsItem(PlanMasterController* masterController,
 
     connect(this,               &MissionSettingsItem::specifyMissionFlightSpeedChanged, this, &MissionSettingsItem::_setDirtyAndUpdateLastSequenceNumber);
     connect(&_cameraSection,    &CameraSection::itemCountChanged,                       this, &MissionSettingsItem::_setDirtyAndUpdateLastSequenceNumber);
-    connect(&_speedSection,     &CameraSection::itemCountChanged,                       this, &MissionSettingsItem::_setDirtyAndUpdateLastSequenceNumber);
+    connect(&_speedSection,     &SpeedSection::itemCountChanged,                        this, &MissionSettingsItem::_setDirtyAndUpdateLastSequenceNumber);
     connect(this,               &MissionSettingsItem::terrainAltitudeChanged,           this, &MissionSettingsItem::_setHomeAltFromTerrain);
     connect(&_cameraSection,    &CameraSection::dirtyChanged,                           this, &MissionSettingsItem::_sectionDirtyChanged);
     connect(&_speedSection,     &SpeedSection::dirtyChanged,                            this, &MissionSettingsItem::_sectionDirtyChanged);

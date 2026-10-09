@@ -27,14 +27,14 @@ Rectangle {
     property bool _globalAltFrameIsMixed: _globalAltFrame == QGroundControl.AltitudeFrameMixed
     property real _radius: ScreenTools.defaultFontPixelWidth / 2
     property real _fieldSpacing: ScreenTools.defaultFontPixelHeight / 2
+    property var _maxVolumeFact: factPanelController.getParameterFact(-1, "WS_MAX_VOLUME", false)
 
     QGCPalette { id: qgcPal; colorGroupEnabled: root.enabled }
 
-    /// 勾选采样点时若停留时间还是 0，用这个默认值（秒）
-    readonly property real _defaultSampleHoldSeconds: 10
+    FactPanelController { id: factPanelController }
 
-    /// 整条航线只允许一个采样点：找除本航点之外的已有采样点
     function _findOtherSamplePoint() {
+        // 整条航线只允许一个采样点：遍历任务里除当前航点外的其它航点，找已勾选采样的
         const items = missionItem.masterController.missionController.visualItems
         for (let i = 1; i < items.count; i++) {
             const item = items.get(i)
@@ -47,30 +47,38 @@ Rectangle {
 
     function _handleSamplePointClick() {
         if (samplePointCheckBox.checked) {
+            // 勾选采样：先查任务里是否已有其它采样点，有则提示并征得同意后移过来
             const other = _findOtherSamplePoint()
             if (other) {
-                // 先回滚勾选，等用户确认；取消时旧采样点保持不变
                 samplePointCheckBox.checked = false
                 QGroundControl.showMessageDialog(root, qsTr("Sample Point"),
-                                                 qsTr("This route already has a sample point (waypoint #%1). Move the sample point to this waypoint?").arg(other.sequenceNumber),
+                                                 qsTr("任务中已有采样点（航点 #%1）。是否将采样点移动到当前航点？").arg(other.missionItemNumber > 0 ? other.missionItemNumber : other.sequenceNumber),
                                                  Dialog.Yes | Dialog.Cancel,
                                                  function() {
                                                      other.setIsSamplePoint(false, 0)
-                                                     _applySamplePoint()
+                                                     missionItem.setIsSamplePoint(true, 0)
                                                  })
             } else {
-                _applySamplePoint()
+                missionItem.setIsSamplePoint(true, 0)
             }
         } else {
+            // 取消勾选
             missionItem.setIsSamplePoint(false, 0)
         }
     }
 
-    function _applySamplePoint() {
-        // 停留时间即采样点：已有值就用它，否则给个默认值，之后可在界面上改
-        const holdSeconds = missionItem.holdTimeFact.value > 0 ? missionItem.holdTimeFact.value : _defaultSampleHoldSeconds
-        missionItem.setIsSamplePoint(true, holdSeconds)
-        samplePointCheckBox.checked = true
+    function _selectSampleBottle(bottle) {
+        missionItem.sampleBottle = bottle
+        if (samplePointCheckBox.checked) {
+            missionItem.autoSampleEnabled = true
+        }
+    }
+
+    function _selectSampleCapacity(capacityMl) {
+        missionItem.sampleCapacityMl = capacityMl
+        if (samplePointCheckBox.checked) {
+            missionItem.autoSampleEnabled = true
+        }
     }
 
     Connections {
@@ -155,8 +163,7 @@ Rectangle {
                 property bool showAdvancedItems:  tabBar.visible ? advancedItemsTab.checked : _advancedItemsAvailable
 
                 property bool _samplingAvailable: missionItem.isSimpleItem && !missionItem.isTakeoffItem && missionItem.specifiesCoordinate
-                property bool _basicItemsAvailable: missionItem.speedSection.available
-                                                    || missionItem.comboboxFacts.count > 0
+                property bool _basicItemsAvailable: missionItem.comboboxFacts.count > 0
                                                     || missionItem.textFieldFacts.count > 0
                                                     || missionItem.nanFacts.count > 0
                 property bool _advancedItemsAvailable: missionItem.comboboxFactsAdvanced.count > 0 || missionItem.textFieldFactsAdvanced.count > 0 || missionItem.nanFactsAdvanced.count > 0
@@ -231,27 +238,83 @@ Rectangle {
                     onClicked:        _handleSamplePointClick()
                 }
 
-                // 采样停留时间（NAV_WAYPOINT 的 param1）：进任务、上传载具、飞行界面都认得
-                RowLayout {
+                QGCLabel {
                     Layout.fillWidth: true
-                    spacing:          ScreenTools.defaultFontPixelWidth
+                    text:             qsTr("选择采样瓶")
+                    visible:          samplePointCheckBox.checked
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns:          4
+                    rowSpacing:       ScreenTools.defaultFontPixelWidth * 0.5
+                    columnSpacing:    ScreenTools.defaultFontPixelWidth * 0.5
                     visible:          samplePointCheckBox.checked
 
-                    QGCLabel { text: qsTr("Hold at sample point") }
+                    Repeater {
+                        model: [1, 2, 3, 4, 5, 6, 7, 8]
 
-                    FactTextField {
-                        fact:                  missionItem.holdTimeFact
-                        showUnits:             true
-                        Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 10
+                        QGCButton {
+                            required property int modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 2.4
+                            text: qsTr("瓶%1").arg(modelData)
+                            checkable: true
+                            checked: missionItem.sampleBottle === modelData
+                            onClicked: root._selectSampleBottle(modelData)
+                        }
                     }
                 }
 
                 QGCLabel {
                     Layout.fillWidth: true
+                    text:             qsTr("选择容量")
+                    visible:          samplePointCheckBox.checked && missionItem.sampleBottle > 0
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing:          ScreenTools.defaultFontPixelWidth * 0.5
+                    visible:          samplePointCheckBox.checked && missionItem.sampleBottle > 0
+
+                    Repeater {
+                        model: [
+                            { ml: 500, label: "500ml" },
+                            { ml: 1000, label: "1000ml" },
+                            { ml: 2500, label: "2500ml" },
+                            { ml: 5000, label: "5000ml" }
+                        ]
+
+                        QGCButton {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 6
+                            Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 2.4
+                            text: modelData.label
+                            checkable: true
+                            checked: missionItem.sampleCapacityMl === modelData.ml
+                            enabled: root._maxVolumeFact !== null
+                                     && modelData.ml <= Number(root._maxVolumeFact.value)
+                            onClicked: root._selectSampleCapacity(modelData.ml)
+                        }
+                    }
+                }
+
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:          samplePointCheckBox.checked && missionItem.autoSampleEnabled
+                                     && missionItem.sampleBottle > 0 && missionItem.sampleBottle <= 2
+                                     && missionItem.sampleCapacityMl > 0
+                    text:             qsTr("预计采样时长：%1秒").arg(Math.ceil(missionItem.sampleDurationSeconds))
+                    font.pointSize:   ScreenTools.smallFontPointSize
+                }
+
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:          samplePointCheckBox.checked && missionItem.sampleBottle > 2
                     wrapMode:         Text.WordWrap
                     font.pointSize:   ScreenTools.smallFontPointSize
-                    text:             qsTr("Only one sample point is allowed per route. Setting a new one moves it away from the current waypoint.")
-                    visible:          samplePointCheckBox.checked
+                    text:             qsTr("瓶3至瓶8仅供界面选择，当前飞控自动采样只支持瓶1和瓶2。")
                 }
             }
 
@@ -352,17 +415,6 @@ Rectangle {
 
                         onEnableCheckboxClicked: object.rawValue = enableCheckBoxChecked ? 0 : NaN
                     }
-                }
-
-                FactTextFieldSlider {
-                    Layout.fillWidth: true
-                    label: qsTr("Flight Speed")
-                    fact: missionItem.speedSection.flightSpeed
-                    showEnableCheckbox: true
-                    enableCheckBoxChecked: missionItem.speedSection.specifyFlightSpeed
-                    visible: missionItem.speedSection.available
-
-                    onEnableCheckboxClicked: missionItem.speedSection.specifyFlightSpeed = enableCheckBoxChecked
                 }
             }
 

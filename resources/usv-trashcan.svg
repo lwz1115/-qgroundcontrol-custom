@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <!-- Full-bleed white trash can: tinted by ColoredSvgImageProvider (SourceIn alpha mask),
+         not dependent on the fill color itself, sized 24x24 to match takeoff/rtl icons -->
+    <path style="fill:#fff" d="M6 2l1-1h10l1 1h4v2H2V2h4zM4 6h16l-1.5 14a2 2 0 0 1-2 1.8h-9a2 2 0 0 1-2-1.8L4 6zm4 2l.7 12h2.3V8H8zm4 0v12h2.3V8H12zm4.3 0l-.7 12H17L17.7 8H16.3z"/>
+</svg>

@@ -23,7 +23,7 @@ MapQuickItem {
             checked:            _isCurrentItem
             isSamplePoint:      missionItem.isSamplePoint === true
             label:              missionItem.abbreviation
-            index:              missionItem.abbreviation.charAt(0) > 'A' && missionItem.abbreviation.charAt(0) < 'z' ? -1 : missionItem.sequenceNumber
+            index:              missionItem.abbreviation.charAt(0) > 'A' && missionItem.abbreviation.charAt(0) < 'z' ? -1 : missionItem.missionItemNumber
             gimbalYaw:          missionItem.missionGimbalYaw
             vehicleYaw:         missionItem.missionVehicleYaw
             showGimbalYaw:      !isNaN(missionItem.missionGimbalYaw)
