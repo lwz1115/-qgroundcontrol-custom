@@ -30,7 +30,7 @@ Item {
     readonly property string rtlTitle:                      qsTr("Return")
     readonly property string takeoffTitle:                  qsTr("Takeoff")
     readonly property string landTitle:                     qsTr("Land")
-    readonly property string startMissionTitle:             qsTr("Start Mission")
+    readonly property string startMissionTitle:             qsTr("Auto")
     readonly property string mvStartMissionTitle:           qsTr("Start Mission (MV)")
     readonly property string continueMissionTitle:          qsTr("Continue Mission")
     readonly property string resumeMissionUploadFailTitle:  qsTr("Resume FAILED")
@@ -126,12 +126,12 @@ Item {
     property bool showArm:                  _guidedActionsEnabled && !_vehicleArmed && _canArm
     property bool showForceArm:             _guidedActionsEnabled && !_vehicleArmed
     property bool showDisarm:               _guidedActionsEnabled && _vehicleArmed && !_vehicleFlying
-    property bool showRTL:                  _guidedActionsEnabled && _activeVehicle && _vehicleArmed && _activeVehicle.supports.guidedMode && _vehicleFlying && !_vehicleInRTLMode
+    property bool showRTL:                  _guidedActionsEnabled && _activeVehicle && _vehicleArmed && _activeVehicle.supports.guidedMode && !_vehicleInRTLMode && _missionActive && !_fixedWingOnApproach
     property bool showTakeoff:              _guidedActionsEnabled && _activeVehicle && (_activeVehicle.supports.guidedTakeoffWithAltitude || _activeVehicle.supports.guidedTakeoffWithoutAltitude) && !_vehicleFlying && _canTakeoff
     property bool showLand:                 _guidedActionsEnabled && _activeVehicle && _activeVehicle.supports.guidedMode && _vehicleArmed && !_activeVehicle.fixedWing && !_vehicleInLandMode
-    property bool showStartMission:         _guidedActionsEnabled && _missionAvailable && !_missionActive && !_vehicleFlying && _canStartMission
+    property bool showStartMission:         _guidedActionsEnabled && _missionAvailable && !_missionActive && !_vehicleInRTLMode && _canStartMission
     property bool showContinueMission:      _guidedActionsEnabled && _missionAvailable && !_missionActive && _vehicleArmed && _vehicleFlying && (_currentMissionIndex < _visualItemsCount - 1)
-    property bool showPause:                _guidedActionsEnabled && _activeVehicle && _vehicleArmed && _activeVehicle.supports.pauseVehicle && _vehicleFlying && !_vehiclePaused && !_fixedWingOnApproach
+    property bool showPause:                _guidedActionsEnabled && _activeVehicle && _vehicleArmed && _activeVehicle.supports.pauseVehicle && _vehicleFlying && !_vehiclePaused && !_fixedWingOnApproach && _missionActive
     property bool showChangeAlt:            _guidedActionsEnabled && _activeVehicle && _vehicleFlying && _activeVehicle.supports.guidedMode && _vehicleArmed && !_missionActive
     property bool showChangeLoiterRadius:   _guidedActionsEnabled && _activeVehicle && _vehicleFlying && _activeVehicle.supports.guidedMode && _vehicleArmed && !_missionActive && _vehicleInFwdFlight && fwdFlightGotoMapCircle.visible
     property bool showChangeSpeed:          _guidedActionsEnabled && _activeVehicle && _vehicleFlying && _activeVehicle.supports.guidedMode && _vehicleArmed && !_missionActive && _speedLimitsAvailable
@@ -654,9 +654,20 @@ Item {
             _activeVehicle.abortLanding(50)     // hardcoded value for climbOutAltitude that is currently ignored
             break
         case actionPause:
-            var valueInMeters = _unitsConversion.appSettingsVerticalDistanceUnitsToMeters(sliderOutputValue)
-            var altitudeChangeInMeters = valueInMeters - _activeVehicle.altitudeRelative.rawValue
-            _activeVehicle.guidedModeChangeAltitude(altitudeChangeInMeters, true /* pauseVehicle */)
+            // 无人船：暂停 = 切回手动模式（让船停下）。手动模式名由固件返回（MANUAL 等），
+            // 在 flightModes 里按 "manual" 关键字找；找不到就退回暂停模式兜底。
+            // 切过去后飞行模式不再是 mission/rtl/pause，showContinueMission 会随之出现，
+            // 左上角按钮由"暂停"变为"继续任务"。
+            if (_activeVehicle) {
+                var manualMode = _activeVehicle.pauseFlightMode
+                for (var mi = 0; mi < _activeVehicle.flightModes.length; mi++) {
+                    if (_activeVehicle.flightModes[mi].toLowerCase().indexOf("manual") >= 0) {
+                        manualMode = _activeVehicle.flightModes[mi]
+                        break
+                    }
+                }
+                _activeVehicle.flightMode = manualMode
+            }
             break
         case actionMVPause:
             selectedVehicles = QGroundControl.multiVehicleManager.selectedVehicles

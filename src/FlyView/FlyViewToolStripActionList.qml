@@ -16,6 +16,8 @@ ToolStripActionList {
         GuidedActionTakeoff { },
         GuidedActionRTL { },
         GuidedActionPause { },
+        // "清除轨迹"放在暂停/继续任务下方，外形与自动导航一致（橡皮擦图标）
+        FlyViewClearTrajectoryAction { },
         // "动作(Actions)"按钮对无人船无意义：从左上角工具条移除，任何场景都不再显示
         FlyViewGripperButton { }
     ]
