@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="zh-CN" sourcelanguage="en">
   <context>
@@ -24774,6 +24774,121 @@ If a vehicle still has this key configured, you will no longer be able to commun
     <message>
       <source>Live view only, nothing is saved</source>
       <translation>仅实时显示，不保存数据</translation>
+    </message>
+  </context>
+  <context>
+    <name>ShuttleControl</name>
+    <message>
+      <source>两点穿梭横移</source>
+      <translation>两点穿梭横移</translation>
+    </message>
+    <message>
+      <source>航点 A</source>
+      <translation>航点 A</translation>
+    </message>
+    <message>
+      <source>航点 B</source>
+      <translation>航点 B</translation>
+    </message>
+    <message>
+      <source>航点 %1</source>
+      <translation>航点 %1</translation>
+    </message>
+    <message>
+      <source>无动作（悬停）</source>
+      <translation>无动作（悬停）</translation>
+    </message>
+    <message>
+      <source>延迟 %1 秒</source>
+      <translation>延迟 %1 秒</translation>
+    </message>
+    <message>
+      <source>延迟秒数</source>
+      <translation>延迟秒数</translation>
+    </message>
+    <message>
+      <source>切换 → B</source>
+      <translation>切换 → B</translation>
+    </message>
+    <message>
+      <source>切换 → A</source>
+      <translation>切换 → A</translation>
+    </message>
+    <message>
+      <source>停止</source>
+      <translation>停止</translation>
+    </message>
+    <message>
+      <source>穿梭未启动</source>
+      <translation>穿梭未启动</translation>
+    </message>
+    <message>
+      <source>移动中：前往 A 点</source>
+      <translation>移动中：前往 A 点</translation>
+    </message>
+    <message>
+      <source>移动中：前往 B 点</source>
+      <translation>移动中：前往 B 点</translation>
+    </message>
+    <message>
+      <source>悬停在 A 点</source>
+      <translation>悬停在 A 点</translation>
+    </message>
+    <message>
+      <source>悬停在 B 点</source>
+      <translation>悬停在 B 点</translation>
+    </message>
+    <message>
+      <source>A 点任务执行中…</source>
+      <translation>A 点任务执行中…</translation>
+    </message>
+    <message>
+      <source>B 点任务执行中…</source>
+      <translation>B 点任务执行中…</translation>
+    </message>
+    <message>
+      <source>移动中…</source>
+      <translation>移动中…</translation>
+    </message>
+    <message>
+      <source>任务执行中…</source>
+      <translation>任务执行中…</translation>
+    </message>
+    <message>
+      <source>任务剩余：%1 秒</source>
+      <translation>任务剩余：%1 秒</translation>
+    </message>
+    <message>
+      <source>航点坐标无效</source>
+      <translation>航点坐标无效</translation>
+    </message>
+    <message>
+      <source>目标航点无效</source>
+      <translation>目标航点无效</translation>
+    </message>
+    <message>
+      <source>启动穿梭失败</source>
+      <translation>启动穿梭失败</translation>
+    </message>
+    <message>
+      <source>两点距离过近（&lt; 0.5m）</source>
+      <translation>两点距离过近（&lt; 0.5m）</translation>
+    </message>
+    <message>
+      <source>两点距离过远（&gt; 5000m）</source>
+      <translation>两点距离过远（&gt; 5000m）</translation>
+    </message>
+    <message>
+      <source>两点距离过近（&lt; 0.5m），无法切换</source>
+      <translation>两点距离过近（&lt; 0.5m），无法切换</translation>
+    </message>
+    <message>
+      <source>两点距离过远（&gt; 5000m），无法切换</source>
+      <translation>两点距离过远（&gt; 5000m），无法切换</translation>
+    </message>
+    <message>
+      <source>手动模式接管，穿梭已退出</source>
+      <translation>手动模式接管，穿梭已退出</translation>
     </message>
   </context>
 </TS>
