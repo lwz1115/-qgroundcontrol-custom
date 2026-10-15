@@ -852,6 +852,11 @@ Item {
             spacing: ScreenTools.defaultFontPixelWidth * 0.5
             Layout.minimumWidth: ScreenTools.defaultFontPixelWidth * 16
 
+            // 用于直接读写飞控 WP_SPEED 参数（方案 A：速度设置 = 改 WP_SPEED，不再往任务里插 DO_CHANGE_SPEED）
+            FactPanelController {
+                id: speedFacts
+            }
+
             QGCLabel {
                 text:             qsTr("Autonomous navigation speed (max 5 m/s)")
                 Layout.fillWidth: true
@@ -881,32 +886,27 @@ Item {
                     // 手动输入超上限的值也要显式钳制到 5 m/s，否则记忆值和面板显示会失控
                     const speed = Math.min(enteredSpeed, speedFact.userMax)
                     QGroundControl.showMessageDialog(_root, qsTr("Set Speed"),
-                        qsTr("Apply %1 m/s to the mission? The boat moves at this speed after upload.")
+                        qsTr("Apply %1 m/s to the vehicle? The boat moves at this speed after applying.")
                             .arg(speed),
                         Dialog.Yes | Dialog.Cancel,
                         function() {
                             // 记忆值在确认之后才落盘：放在弹框前写，用户点“取消”也会把
                             // 上次速度改掉，出现“记忆值是新值、当前任务还是旧值”的不一致。
                             // 新建任务/重启 QGC 时 SpeedSection 构造会读它作为初始值，
-                            // 因此设成 2 之后一直默认是 2，直到下一次改速度并上传。
+                            // 因此设成 2 之后一直默认是 2，直到下一次改速度并应用。
                             speedFact.value = speed
-                            // 全局速度挂在任务设置项（index 0，MissionSettingsItem）上：
-                            // 它的 appendMissionItems 会在 home 之后、所有航点之前插入一条
-                            // MAV_CMD_DO_CHANGE_SPEED，对整条任务（含起点到第一个航点的路程）
-                            // 持续生效。若在航点上插速度命令，子命令会占掉序号（3 个航点显示 1/3/5）。
-                            const settingsItem = _missionController.visualItems.get(0)
-                            if (settingsItem && settingsItem.speedSection) {
-                                settingsItem.speedSection.specifyFlightSpeed = true
-                                settingsItem.speedSection.flightSpeed.rawValue = speed
-                            }
-                            // 清掉所有航点上残留的速度子命令（防止旧任务里的逐点速度命令再次占号）
-                            const items = _missionController.visualItems
-                            for (let i = 1; i < items.count; i++) {
-                                const item = items.get(i)
-                                if (!item || item.isSimpleItem !== true || !item.speedSection) {
-                                    continue
-                                }
-                                item.speedSection.specifyFlightSpeed = false
+                            // 方案 A：直接写飞控 WP_SPEED 参数，不再往任务里插 DO_CHANGE_SPEED。
+                            // 写参数需要载具在线：未连接时 getParameterFact 返回 null，
+                            // 只更新记忆值并提示，其它逻辑（ETA、默认值）仍用记忆值。
+                            const wpSpeedFact = speedFacts.getParameterFact(-1, "WP_SPEED", false)
+                            if (wpSpeedFact) {
+                                // 用 value 写入：走参数元数据（类型/min/max）校验与转换，
+                                // 前面 speed 已按 autonomousNavSpeed.userMax 钳制到 5 m/s，
+                                // 双保险保证发到飞控的是合法数值。
+                                wpSpeedFact.value = speedFact.value
+                            } else {
+                                QGroundControl.showMessageDialog(_root, qsTr("Set Speed"),
+                                    qsTr("No vehicle connected. The speed is saved locally, connect and apply again to update WP_SPEED."))
                             }
                             dropPanel.hide()
                         })

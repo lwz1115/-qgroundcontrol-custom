@@ -683,6 +683,7 @@ bool MissionController::_loadJsonMissionFileV2(const QJsonObject& json, QmlObjec
         { _jsonGlobalPlanAltitudeModeKey,   QJsonValue::Double, false },
         { _jsonLoopCountKey,                QJsonValue::Double, false },
         { _jsonReturnHomeAfterLoopKey,      QJsonValue::Bool,   false },
+        { _jsonAutonomousNavSpeedKey,       QJsonValue::Double, false },
     };
     if (!JsonParsing::validateKeys(json, rootKeyInfoList, errorString)) {
         return false;
@@ -929,6 +930,15 @@ bool MissionController::load(const QJsonObject& json, QString& errorString)
         const bool returnHomeSignalsWereBlocked = returnHomeFact->blockSignals(true);
         returnHomeFact->setRawValue(json[_jsonReturnHomeAfterLoopKey].toBool(returnHomeFact->rawValue().toBool()));
         returnHomeFact->blockSignals(returnHomeSignalsWereBlocked);
+
+        // 自主导航速度（方案 A：速度写飞控 WP_SPEED）随任务保存，跨电脑/重装 QGC 仍可恢复记忆值。
+        // 只在任务里存了有效速度时覆盖本地记忆；旧文件没有该字段时保持当前值。
+        if (json.contains(_jsonAutonomousNavSpeedKey)) {
+            const double savedSpeed = json[_jsonAutonomousNavSpeedKey].toDouble();
+            if (savedSpeed > 0.0) {
+                _appSettings->autonomousNavSpeed()->setRawValue(savedSpeed);
+            }
+        }
     }
 
     return true;
@@ -982,6 +992,7 @@ void MissionController::save(QJsonObject& json)
     json[_jsonPlannedHomePositionKey]       = coordinateValue;
     json[_jsonLoopCountKey]                 = settingsItem->loopCount()->rawValue().toInt();
     json[_jsonReturnHomeAfterLoopKey]       = settingsItem->returnHomeAfterLoop()->rawValue().toBool();
+    json[_jsonAutonomousNavSpeedKey]        = _appSettings->autonomousNavSpeed()->rawValue().toDouble();
     json[_jsonFirmwareTypeKey]              = _controllerVehicle->firmwareType();
     json[_jsonVehicleTypeKey]               = _controllerVehicle->vehicleType();
     json[_jsonCruiseSpeedKey]               = _controllerVehicle->defaultCruiseSpeed();

@@ -157,8 +157,9 @@ void MissionSettingsItem::appendMissionItems(QList<MissionItem*>& items, QObject
                                         missionItemParent);
     items.append(item);
 
+    // 方案 A：速度设置直接写飞控 WP_SPEED 参数，不再往任务里插入 DO_CHANGE_SPEED ，
+    // 因此任务设置项不再生成速度命令项（_cameraSection 仍正常生成相机命令）。
     _cameraSection.appendSectionItems(items, missionItemParent, seqNum);
-    _speedSection.appendSectionItems(items, missionItemParent, seqNum);
 }
 
 bool MissionSettingsItem::addMissionEndAction(QList<MissionItem*>& items, int seqNum, QObject* missionItemParent)
@@ -230,16 +231,15 @@ bool MissionSettingsItem::addMissionEndAction(QList<MissionItem*>& items, int se
 
 bool MissionSettingsItem::scanForMissionSettings(QmlObjectListModel* visualItems, int scanIndex)
 {
-    bool foundSpeedSection = false;
     bool foundCameraSection = false;
 
     qCDebug(MissionSettingsItemLog) << "MissionSettingsItem::scanForMissionSettings count:scanIndex" << visualItems->count() << scanIndex;
 
-    // Scan through the initial mission items for possible mission settings
+    // 方案 A：速度设置直接写飞控 WP_SPEED 参数，任务里不再有 DO_CHANGE_SPEED，
+    // 也不再从旧任务恢复速度段（避免残留命令被重新识别并重新生成）。
     foundCameraSection = _cameraSection.scanForSection(visualItems, scanIndex);
-    foundSpeedSection = _speedSection.scanForSection(visualItems, scanIndex);
 
-    return foundSpeedSection || foundCameraSection;
+    return foundCameraSection;
 }
 
 double MissionSettingsItem::complexDistance(void) const
@@ -308,11 +308,8 @@ void MissionSettingsItem::_updateAltitudeInCoordinate(QVariant value)
 
 double MissionSettingsItem::specifiedFlightSpeed(void)
 {
-    if (_speedSection.specifyFlightSpeed()) {
-        return _speedSection.flightSpeed()->rawValue().toDouble();
-    } else {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+    // 方案 A：速度设置直接写飞控 WP_SPEED 参数，任务内不再有任务级速度，恒返回 NaN。
+    return std::numeric_limits<double>::quiet_NaN();
 }
 
 void MissionSettingsItem::_setHomeAltFromTerrain(double terrainAltitude)

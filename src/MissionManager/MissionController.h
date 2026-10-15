@@ -469,6 +469,7 @@ private:
     static constexpr const char* _jsonGlobalPlanAltitudeModeKey = "globalPlanAltitudeMode";
     static constexpr const char* _jsonLoopCountKey =                 "loopCount";
     static constexpr const char* _jsonReturnHomeAfterLoopKey =      "returnHomeAfterLoop";
+    static constexpr const char* _jsonAutonomousNavSpeedKey =       "autonomousNavSpeed"; ///< 无人船自主导航速度（方案 A：不随任务上传，仅本地记忆值随任务保存）
 
     static constexpr int   _missionFileVersion =            2;
 };
