@@ -1677,6 +1677,13 @@ void Vehicle::_parametersReady(bool parametersReady)
     }
 
     _updateWaterSamplingParams();
+    // 参数就绪后 FRAME_CLASS / FRAME_TYPE 才可读，isOmniX 依赖它们，主动刷新
+    emit vehicleTypeChanged();
+
+    // 速度权威以飞控 WP_SPEED 为准：参数就绪后把飞控当前值同步到本地记忆
+    //（autonomousNavSpeed），这样换载具 / 重开 QGC 后，速度面板与穿梭都显示
+    // 当前载具的真实速度，而不是上一次 QGC 本地存的值。仅当飞控确实有该参数时覆盖。
+    _syncWpSpeedToMemory();
 
     _multirotor_speed_limits_available = _firmwarePlugin->mulirotorSpeedLimitsAvailable(this);
     _fixed_wing_airspeed_limits_available = _firmwarePlugin->fixedWingAirSpeedLimitsAvailable(this);
@@ -3695,6 +3702,8 @@ void Vehicle::_textMessageReceived(MAV_COMPONENT componentid, MAV_SEVERITY sever
 {
     // 水质采样：固件用 “WS:” 前缀回报启动确认与拒绝原因，先在这里消费掉
     _handleWaterSamplingStatusText(text);
+    // 两点穿梭横移：固件用 “SHUTTLE_ / REACHED_WP / MANUAL_MODE_OVERRIDE” 回报事件
+    _handleShuttleStatusText(text);
 
     // PX4 backwards compatibility: messages sent out ending with a tab are also sent as event
     if (px4Firmware() && text.endsWith('\t')) {
@@ -3833,6 +3842,119 @@ void Vehicle::_setWaterSamplingStage(WaterSamplingStage stage)
     }
     _waterSamplingStage = stage;
     emit waterSamplingStageChanged();
+}
+
+/*---------------------------------------------------------------------------*/
+/*===========================================================================*/
+/*                          Two-Point Shuttle (OMNI X)                       */
+/*===========================================================================*/
+
+bool Vehicle::isOmniX(void) const
+{
+    // 优先用飞控参数识别 OMNI X：FRAME_CLASS == 2（船）且 FRAME_TYPE == 2（OmniX）。
+    // 不靠 MAV_TYPE：船型实连上报的是 MAV_TYPE_SURFACE_BOAT，不是自定义 TRACK；
+    // 也不能把所有 rover/船都当 OmniX（普通船没有横移能力）。
+    ParameterManager* pm = parameterManager();
+    if (pm && pm->parameterExists(-1, QStringLiteral("FRAME_CLASS"))
+            && pm->parameterExists(-1, QStringLiteral("FRAME_TYPE"))) {
+        const int frameClass = pm->getParameter(-1, QStringLiteral("FRAME_CLASS"))->rawValue().toInt();
+        const int frameType  = pm->getParameter(-1, QStringLiteral("FRAME_TYPE"))->rawValue().toInt();
+        return (frameClass == 2) && (frameType == 2);
+    }
+    // 参数尚未就绪（离线/刚连接）时退回自定义类型判断，避免图标闪动
+    return vehicleType() == MAV_TYPE_TRACK;
+}
+
+void Vehicle::_syncWpSpeedToMemory(void)
+{
+    // 速度以飞控 WP_SPEED 为准：参数就绪后读飞控当前值，钳制到有效范围后写回本地记忆
+    // autonomousNavSpeed。换载具 / 重开 QGC 时，参数就绪会再跑一次，记忆值随之刷新为
+    // 新载具的真实速度，速度面板与穿梭速度都与飞控保持一致。
+    ParameterManager* pm = parameterManager();
+    if (!pm || !pm->parameterExists(-1, QStringLiteral("WP_SPEED"))) {
+        return;   // 固件没有 WP_SPEED：保留本地记忆值，不覆盖
+    }
+    const double wpSpeed = pm->getParameter(-1, QStringLiteral("WP_SPEED"))->rawValue().toDouble();
+    if (!(wpSpeed > 0.0)) {
+        return;   // 飞控值无效：不用它覆盖本地记忆
+    }
+    Fact* speedFact = SettingsManager::instance()->appSettings()->autonomousNavSpeed();
+    const double minSpeed = speedFact->rawUserMin().isValid() ? speedFact->rawUserMin().toDouble() : 0.1;
+    const double maxSpeed = speedFact->rawUserMax().isValid() ? speedFact->rawUserMax().toDouble() : 5.0;
+    const double clamped = qBound(minSpeed, wpSpeed, maxSpeed);
+    // 值相同则不写，避免无谓的设置变更
+    if (!QGC::fuzzyCompare(clamped, speedFact->rawValue().toDouble())) {
+        speedFact->setRawValue(clamped);
+    }
+}
+
+bool Vehicle::startShuttle(double lat, double lon, double speedMps, double radiusM)
+{
+    if (!isOmniX()) {
+        qCWarning(VehicleLog) << "Shuttle: not an OMNI X vehicle, ignored";
+        return false;
+    }
+    if (qIsNaN(lat) || qIsNaN(lon)) {
+        qCWarning(VehicleLog) << "Shuttle: invalid target coordinate, ignored";
+        return false;
+    }
+    if (speedMps <= 0.0) {
+        qCWarning(VehicleLog) << "Shuttle: illegal speed" << speedMps;
+        return false;
+    }
+
+    // COMMAND_INT 的 DO_REPOSITION：只有 param1~4 + x/y/z（没有 param5-7），
+    // 按飞控约定：param1 = 速度（>0）、param2 = bit0 切模式、param3 = 到达半径、
+    // param4 = 偏航 NaN（本船不转向，忽略）、x/y/z = 经纬度*1e7 与高度 mm。
+    // 不关心 ACK 结果（nullptr = 无回调）：到点由 STATUSTEXT REACHED_WP + 位置计算双重确认。
+    sendMavCommandIntWithHandler(
+        nullptr,
+        defaultComponentId(),
+        MAV_CMD_DO_REPOSITION,
+        MAV_FRAME_GLOBAL,
+        static_cast<float>(speedMps),
+        MAV_DO_REPOSITION_FLAGS_CHANGE_MODE,
+        static_cast<float>(radiusM > 0.0 ? radiusM : 0.0f),
+        NAN,
+        lat,
+        lon,
+        altitudeAMSL()->rawValue().toFloat() * 1000.0f
+    );
+
+    return true;
+}
+
+/// 解析飞控 “SHUTTLE_ / REACHED_WP / MANUAL_MODE_OVERRIDE” STATUSTEXT，
+/// 全部透传给 UI 提示；穿梭状态机由 ShuttleControl.qml 持有，这里不存状态。
+void Vehicle::_handleShuttleStatusText(const QString& text)
+{
+    if (!isOmniX()) {
+        return;
+    }
+
+    // 手动接管：安全优先，转发给 UI 立即复位穿梭
+    if (text.contains(QStringLiteral("MANUAL_MODE_OVERRIDE"), Qt::CaseInsensitive)) {
+        qCDebug(VehicleLog) << "Shuttle: manual override, aborting shuttle";
+        _setShuttleMessage(text);
+        return;
+    }
+
+    // 其它 SHUTTLE_ 事件 / 到点回执：原样透传（REACHED_WP / SHUTTLE_TASK_START /
+    // SHUTTLE_TASK_END / SHUTTLE_ERR_DIST / SHUTTLE_STATE）
+    if (text.contains(QStringLiteral("SHUTTLE_"), Qt::CaseInsensitive)
+        || text.contains(QStringLiteral("REACHED_WP"), Qt::CaseInsensitive)
+        || text.contains(QStringLiteral("TASK_DONE"), Qt::CaseInsensitive)) {
+        _setShuttleMessage(text);
+        return;
+    }
+}
+
+void Vehicle::_setShuttleMessage(const QString& message)
+{
+    if (_shuttleMessage != message) {
+        _shuttleMessage = message;
+        emit shuttleMessageChanged(_shuttleMessage);
+    }
 }
 
 /*---------------------------------------------------------------------------*/

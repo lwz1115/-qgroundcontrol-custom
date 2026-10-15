@@ -65,6 +65,15 @@ Item {
         pipWidth:           _root.pipWidth
     }
 
+    // 两点穿梭横移（OMNI X）：横移卡在采样卡上方，三卡一竖排（横移/采样/水质）
+    ShuttleControl {
+        id:                 shuttleControl
+        anchors.fill:       parent
+        parentToolInsets:   _root.parentToolInsets
+        pipTopLeft:         _root.pipTopLeft
+        pipWidth:           _root.pipWidth
+    }
+
     // 水质采样控制：与水滴卡片同一竖列、排在它上方，一起紧贴摄像头小窗顶部
     WaterSamplingControl {
         id:                 waterSamplingControl

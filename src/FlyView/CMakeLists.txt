@@ -77,6 +77,7 @@ qt_add_qml_module(FlyViewModule
         VehicleWarnings.qml
         VirtualJoystick.qml
         VTOLChecklist.qml
+        ShuttleControl.qml
         WaterQualityLiveChart.qml
         WaterQualityOverlay.qml
         WaterSamplingControl.qml
@@ -91,6 +92,7 @@ qt_add_resources(FlyViewModule flyview_resources
         "${CMAKE_SOURCE_DIR}/resources/land.svg"
         "${CMAKE_SOURCE_DIR}/resources/NoVideoBackground.jpg"
         "${CMAKE_SOURCE_DIR}/resources/pause-mission.svg"
+        "${CMAKE_SOURCE_DIR}/resources/shuttle.svg"
 )
 
 qt_add_resources(FlyViewModule flyview_qmlimages

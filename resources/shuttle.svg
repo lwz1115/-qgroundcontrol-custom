@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 两点穿梭横移入口图标：双向箭头，靠 QGCColoredImage 按 alpha 蒙版染色 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- 左箭头 -->
+  <path fill="#ffffff" d="M4 12l5-5v3h7v4H9v3z"/>
+  <!-- 右箭头 -->
+  <path fill="#ffffff" d="M20 12l-5-5v3H8v4h7v3z"/>
+</svg>

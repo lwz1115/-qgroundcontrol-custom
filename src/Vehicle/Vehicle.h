@@ -170,6 +170,12 @@ public:
     Q_PROPERTY(bool                 vtol                        READ vtol                                                           NOTIFY vehicleTypeChanged)
     Q_PROPERTY(bool                 rover                       READ rover                                                          NOTIFY vehicleTypeChanged)
     Q_PROPERTY(bool                 sub                         READ sub                                                            NOTIFY vehicleTypeChanged)
+    /// 当前是否为 OMNI X 船形（自定义 MAV_TYPE_TRACK）：两点穿梭横移功能只对它显示
+    Q_PROPERTY(bool                 isOmniX                     READ isOmniX                                                        NOTIFY vehicleTypeChanged)
+    /// 飞控回报的最近一条穿梭消息（SHUTTLE_ / REACHED_WP / MANUAL_MODE_OVERRIDE），仅供 UI 提示。
+    /// 状态机本身由 ShuttleControl.qml 持有（位置/速度/飞行模式都可在 QML 读取），
+    /// Vehicle 只负责“发指令 + 透传飞控消息”，避免出现第二份状态源。
+    Q_PROPERTY(QString               shuttleMessage              READ shuttleMessage                                               NOTIFY shuttleMessageChanged)
     Q_PROPERTY(VehicleSupports*     supports                    READ supports                                                       CONSTANT)
     Q_PROPERTY(QString              prearmError                 READ prearmError                WRITE setPrearmError                NOTIFY prearmErrorChanged)
     Q_PROPERTY(int                  motorCount                  READ motorCount                                                     CONSTANT)
@@ -791,6 +797,18 @@ public slots:
     /// 本次采样的飞控端总时长（秒）：放杆 + 抽水 + 关泵延时 + 收杆，用于界面进度显示
     Q_INVOKABLE double waterSampleDuration(int volumeMl) const;
 
+    // ---- 两点穿梭横移（OMNI X 船形）----
+
+    /// 启动两点穿梭：把船从当前位置移动到 pointA
+    ///     @param lat   A 点纬度
+    ///     @param lon   A 点经度
+    ///     @param speedMps 航行速度（m/s，>0）
+    ///     @param radiusM  到达半径（m，>0 覆盖飞控默认）
+    Q_INVOKABLE bool startShuttle(double lat, double lon, double speedMps, double radiusM);
+
+    QString shuttleMessage          () const { return _shuttleMessage; }
+    bool    isOmniX                 () const;
+
     int     waterMaxVolume        () const { return _waterMaxVolume; }
     double  waterFlowRate         () const { return _waterFlowRate; }
     double  waterOpenTime         () const { return _waterOpenTime; }
@@ -896,6 +914,9 @@ signals:
     /// 飞控回报的抽水秒数变化（对应 waterPumpSeconds 属性）
     void waterPumpSecondsChanged        ();
 
+    // ---- 两点穿梭横移（OMNI X）----
+    void shuttleMessageChanged          (const QString& message);
+
     void isROIEnabledChanged            ();
     void roiRelativeAltitudeMetersChanged();
     void roiCoordChanged                (const QGeoCoordinate& centerCoord);
@@ -978,6 +999,14 @@ private:
     void _abortWaterSamplingSequence    (const QString& reason);
     /// 更新飞控回报的流程阶段（值不变时不发信号）
     void _setWaterSamplingStage         (WaterSamplingStage stage);
+
+    // ---- 两点穿梭横移（OMNI X）----
+    /// 解析飞控 “SHUTTLE_ / REACHED_WP / MANUAL_MODE_OVERRIDE” STATUSTEXT，转发给 UI 提示
+    void _handleShuttleStatusText       (const QString& text);
+    /// 记录飞控回报的消息（供 UI 提示）
+    void _setShuttleMessage             (const QString& message);
+    /// 参数就绪后把飞控 WP_SPEED 同步到本地记忆 autonomousNavSpeed（速度以飞控为准）
+    void _syncWpSpeedToMemory           ();
 
     void _activeVehicleChanged          (Vehicle* newActiveVehicle);
     void _handlePing                    (LinkInterface* link, mavlink_message_t& message);
@@ -1262,6 +1291,9 @@ public:
     bool    _waterValveEnabled      = true;      ///< WS_VALVE_ENABLE 是否 == 1
     bool    _waterSampleStartPending = false;    ///< 已发出采样命令，正在等待飞控的启动确认
     int     _waterSampleSeq          = 0;        ///< 递增序号，用于作废过期的启动超时
+
+    // ---- 两点穿梭横移（OMNI X）----
+    QString _shuttleMessage         = QString(); ///< 飞控回报的最近一条消息（供 UI 显示）
 
     MissionManager*                 _missionManager             = nullptr;
     GeoFenceManager*                _geoFenceManager            = nullptr;
