@@ -173,9 +173,13 @@ public:
     /// 当前是否为 OMNI X 船形（自定义 MAV_TYPE_TRACK）：两点穿梭横移功能只对它显示
     Q_PROPERTY(bool                 isOmniX                     READ isOmniX                                                        NOTIFY vehicleTypeChanged)
     /// 飞控回报的最近一条穿梭消息（SHUTTLE_ / REACHED_WP / MANUAL_MODE_OVERRIDE），仅供 UI 提示。
-    /// 状态机本身由 ShuttleControl.qml 持有（位置/速度/飞行模式都可在 QML 读取），
-    /// Vehicle 只负责“发指令 + 透传飞控消息”，避免出现第二份状态源。
+    /// 穿梭状态机由飞控持有（AP_Shuttle），QGC 只负责“发 USER_1 指令 + 解析飞控上报”，
+    /// 不维护第二份状态源，避免两边不一致。
     Q_PROPERTY(QString               shuttleMessage              READ shuttleMessage                                               NOTIFY shuttleMessageChanged)
+    /// 飞控上报的穿梭状态：0=IDLE 1=HOVER 2=MOVING 3=TASKING 4=MANUAL_LOCK（-1=未知）
+    Q_PROPERTY(int                   shuttleState                READ shuttleState                                                 NOTIFY shuttleStateChanged)
+    /// 飞控上报的当前所在航点：0=A 1=B -1=未知
+    Q_PROPERTY(int                   shuttleCurrentWp            READ shuttleCurrentWp                                             NOTIFY shuttleCurrentWpChanged)
     Q_PROPERTY(VehicleSupports*     supports                    READ supports                                                       CONSTANT)
     Q_PROPERTY(QString              prearmError                 READ prearmError                WRITE setPrearmError                NOTIFY prearmErrorChanged)
     Q_PROPERTY(int                  motorCount                  READ motorCount                                                     CONSTANT)
@@ -799,15 +803,32 @@ public slots:
 
     // ---- 两点穿梭横移（OMNI X 船形）----
 
-    /// 启动两点穿梭：把船从当前位置移动到 pointA
-    ///     @param lat   A 点纬度
-    ///     @param lon   A 点经度
-    ///     @param speedMps 航行速度（m/s，>0）
-    ///     @param radiusM  到达半径（m，>0 覆盖飞控默认）
-    Q_INVOKABLE bool startShuttle(double lat, double lon, double speedMps, double radiusM);
+    /// 查询飞控穿梭状态：上报 SHUTTLE_STATE <状态> WP <当前点>（当前点 1=A / 2=B）
+    Q_INVOKABLE void shuttleQueryState();
+    /// 停止穿梭：飞控清理任务并回 LOITER 悬停
+    Q_INVOKABLE void shuttleStop();
+    /// 设置 A 点（与 B 点距离 <2m 时飞控拒绝：SHUTTLE_ERR_DUP_AB）
+    Q_INVOKABLE bool shuttleSetPointA(double lat, double lon);
+    /// 设置 B 点（与 A 点距离 <2m 时飞控拒绝：SHUTTLE_ERR_DUP_AB）
+    Q_INVOKABLE bool shuttleSetPointB(double lat, double lon);
+    /// 切换目标点：飞控自动判断当前所在点（在 A→去 B，在 B→去 A）。
+    /// 移动中 / 任务中飞控会拒绝（SHUTTLE_ERR_BUSY）。
+    Q_INVOKABLE void shuttleSwitch();
+    /// 启动采样任务（模拟 10s，完成上报 SHUTTLE_TASK_DONE）。
+    /// 飞控要求当前处于悬停态，否则返回 SHUTTLE_ERR_NOT_HOVER。
+    Q_INVOKABLE void shuttleStartSampleTask();
+    /// 启启动测量任务（模拟 5s，完成上报 SHUTTLE_TASK_DONE）。
+    /// 飞控要求当前处于悬停态，否则返回 SHUTTLE_ERR_NOT_HOVER。
+    Q_INVOKABLE void shuttleStartMeasureTask();
 
     QString shuttleMessage          () const { return _shuttleMessage; }
     bool    isOmniX                 () const;
+    /// 飞控上报的穿梭状态：0=IDLE 1=HOVER 2=MOVING 3=TASKING 4=MANUAL_LOCK（-1=未知）
+    int     shuttleState            () const { return _shuttleState; }
+    /// 飞控上报的当前所在航点：0=A 1=B -1=未知
+    int     shuttleCurrentWp        () const { return _shuttleCurrentWp; }
+    /// 穿梭任务是否在执行中（TASKING）
+    bool    shuttleTasking          () const { return _shuttleState == 3; }
 
     int     waterMaxVolume        () const { return _waterMaxVolume; }
     double  waterFlowRate         () const { return _waterFlowRate; }
@@ -916,6 +937,8 @@ signals:
 
     // ---- 两点穿梭横移（OMNI X）----
     void shuttleMessageChanged          (const QString& message);
+    void shuttleStateChanged            (int state);
+    void shuttleCurrentWpChanged        (int wp);
 
     void isROIEnabledChanged            ();
     void roiRelativeAltitudeMetersChanged();
@@ -1001,12 +1024,19 @@ private:
     void _setWaterSamplingStage         (WaterSamplingStage stage);
 
     // ---- 两点穿梭横移（OMNI X）----
-    /// 解析飞控 “SHUTTLE_ / REACHED_WP / MANUAL_MODE_OVERRIDE” STATUSTEXT，转发给 UI 提示
-    void _handleShuttleStatusText       (const QString& text);
-    /// 记录飞控回报的消息（供 UI 提示）
-    void _setShuttleMessage             (const QString& message);
+    /// 发送 MAV_CMD_USER_1 穿梭子命令（param1 = subCmd）
+    void _sendShuttleUserCommand      (uint16_t subCmd, double x = qQNaN(), double y = qQNaN());
+    /// 解析飞控 “SHUTTLE_STATE / SHUTTLE_ERR_ / SHUTTLE_WP_A_OK / SHUTTLE_TASK_DONE /
+    /// REACHED_WP / MANUAL_MODE_OVERRIDE” STATUSTEXT，转发给 UI 并维护 _shuttleState / _shuttleCurrentWp
+    void _handleShuttleStatusText     (const QString& text);
+    /// 记录飞控回报的消息（供 UI 提示），并同步解析状态
+    void _setShuttleMessage           (const QString& message);
+    /// 更新飞控上报的穿梭状态（值不变时不发信号）
+    void _setShuttleState             (int state);
+    /// 更新飞控上报的当前所在航点（值不变时不发信号）
+    void _setShuttleCurrentWp         (int wp);
     /// 参数就绪后把飞控 WP_SPEED 同步到本地记忆 autonomousNavSpeed（速度以飞控为准）
-    void _syncWpSpeedToMemory           ();
+    void _syncWpSpeedToMemory         ();
 
     void _activeVehicleChanged          (Vehicle* newActiveVehicle);
     void _handlePing                    (LinkInterface* link, mavlink_message_t& message);
@@ -1294,6 +1324,8 @@ public:
 
     // ---- 两点穿梭横移（OMNI X）----
     QString _shuttleMessage         = QString(); ///< 飞控回报的最近一条消息（供 UI 显示）
+    int     _shuttleState           = -1;        ///< 飞控上报的穿梭状态：0=IDLE 1=HOVER 2=MOVING 3=TASKING 4=MANUAL_LOCK（-1=未知）
+    int     _shuttleCurrentWp       = -1;        ///< 飞控上报的当前所在航点：0=A 1=B（-1=未知）
 
     MissionManager*                 _missionManager             = nullptr;
     GeoFenceManager*                _geoFenceManager            = nullptr;

@@ -85,6 +85,7 @@
 #endif
 
 #include <QtCore/QDateTime>
+#include <QtCore/QRegularExpression>
 
 QGC_LOGGING_CATEGORY(VehicleLog, "Vehicle.Vehicle")
 
@@ -3888,62 +3889,156 @@ void Vehicle::_syncWpSpeedToMemory(void)
     }
 }
 
-bool Vehicle::startShuttle(double lat, double lon, double speedMps, double radiusM)
+/// 统一的 MAV_CMD_USER_1 穿梭子命令发送实现（COMMAND_INT）。
+/// 子命令表（飞控 AP_Shuttle 约定）：
+///   0=查询状态  1=停止穿梭  2=设A点  3=设B点  4=切换  5=采样任务(10s)  6=测量任务(5s)
+/// 设点时 x/y = 经纬度；其余子命令 x/y 传 NaN（飞控不使用）。
+/// 不关心 ACK 结果（nullptr = 无回调）：命令是否被接受由飞控的 SHUTTLE_ERR_* 回报体现。
+void Vehicle::_sendShuttleUserCommand(uint16_t subCmd, double x, double y)
 {
     if (!isOmniX()) {
         qCWarning(VehicleLog) << "Shuttle: not an OMNI X vehicle, ignored";
-        return false;
-    }
-    if (qIsNaN(lat) || qIsNaN(lon)) {
-        qCWarning(VehicleLog) << "Shuttle: invalid target coordinate, ignored";
-        return false;
-    }
-    if (speedMps <= 0.0) {
-        qCWarning(VehicleLog) << "Shuttle: illegal speed" << speedMps;
-        return false;
+        return;
     }
 
-    // COMMAND_INT 的 DO_REPOSITION：只有 param1~4 + x/y/z（没有 param5-7），
-    // 按飞控约定：param1 = 速度（>0）、param2 = bit0 切模式、param3 = 到达半径、
-    // param4 = 偏航 NaN（本船不转向，忽略）、x/y/z = 经纬度*1e7 与高度 mm。
-    // 不关心 ACK 结果（nullptr = 无回调）：到点由 STATUSTEXT REACHED_WP + 位置计算双重确认。
     sendMavCommandIntWithHandler(
         nullptr,
         defaultComponentId(),
-        MAV_CMD_DO_REPOSITION,
+        MAV_CMD_USER_1,
         MAV_FRAME_GLOBAL,
-        static_cast<float>(speedMps),
-        MAV_DO_REPOSITION_FLAGS_CHANGE_MODE,
-        static_cast<float>(radiusM > 0.0 ? radiusM : 0.0f),
-        NAN,
-        lat,
-        lon,
-        altitudeAMSL()->rawValue().toFloat() * 1000.0f
+        static_cast<float>(subCmd),
+        0.0f,   // param2 未用
+        0.0f,   // param3 未用
+        0.0f,   // param4 未用
+        x,      // param5 = 纬度（设点用）
+        y,      // param6 = 经度（设点用）
+        0.0f    // param7 未用
     );
+}
 
+void Vehicle::shuttleQueryState(void)
+{
+    _sendShuttleUserCommand(0);
+}
+
+void Vehicle::shuttleStop(void)
+{
+    _sendShuttleUserCommand(1);
+}
+
+bool Vehicle::shuttleSetPointA(double lat, double lon)
+{
+    if (qIsNaN(lat) || qIsNaN(lon)) {
+        qCWarning(VehicleLog) << "Shuttle: invalid A coordinate, ignored";
+        return false;
+    }
+    _sendShuttleUserCommand(2, lat, lon);
     return true;
 }
 
-/// 解析飞控 “SHUTTLE_ / REACHED_WP / MANUAL_MODE_OVERRIDE” STATUSTEXT，
-/// 全部透传给 UI 提示；穿梭状态机由 ShuttleControl.qml 持有，这里不存状态。
+bool Vehicle::shuttleSetPointB(double lat, double lon)
+{
+    if (qIsNaN(lat) || qIsNaN(lon)) {
+        qCWarning(VehicleLog) << "Shuttle: invalid B coordinate, ignored";
+        return false;
+    }
+    _sendShuttleUserCommand(3, lat, lon);
+    return true;
+}
+
+void Vehicle::shuttleSwitch(void)
+{
+    _sendShuttleUserCommand(4);
+}
+
+void Vehicle::shuttleStartSampleTask(void)
+{
+    _sendShuttleUserCommand(5);
+}
+
+void Vehicle::shuttleStartMeasureTask(void)
+{
+    _sendShuttleUserCommand(6);
+}
+
+/// 解析飞控 “SHUTTLE_STATE / SHUTTLE_ERR_* / SHUTTLE_WP_A_OK / SHUTTLE_WP_B_OK /
+/// SHUTTLE_TASK_DONE / REACHED_WP / MANUAL_MODE_OVERRIDE” STATUSTEXT。
+/// 除透传给 UI 提示外，还从 SHUTTLE_STATE 里提取状态与当前航点，维护
+/// _shuttleState / _shuttleCurrentWp，供 QML 状态机使用（状态机在飞控侧，QGC 只同步）。
 void Vehicle::_handleShuttleStatusText(const QString& text)
 {
     if (!isOmniX()) {
         return;
     }
 
-    // 手动接管：安全优先，转发给 UI 立即复位穿梭
+    // 手动接管：安全优先，转发给 UI 立即复位穿梭，并锁定状态
     if (text.contains(QStringLiteral("MANUAL_MODE_OVERRIDE"), Qt::CaseInsensitive)) {
         qCDebug(VehicleLog) << "Shuttle: manual override, aborting shuttle";
+        _setShuttleState(4);   // MANUAL_LOCK
         _setShuttleMessage(text);
         return;
     }
 
-    // 其它 SHUTTLE_ 事件 / 到点回执：原样透传（REACHED_WP / SHUTTLE_TASK_START /
-    // SHUTTLE_TASK_END / SHUTTLE_ERR_DIST / SHUTTLE_STATE）
-    if (text.contains(QStringLiteral("SHUTTLE_"), Qt::CaseInsensitive)
+    // 状态上报：SHUTTLE_STATE <数字> <关键字> WP <当前点>
+    //   飞控对外输出的数字已按 QGC 映射换算：0=IDLE 1=HOVER 2=MOVING 3=TASKING 4=MANUAL_LOCK
+    //   （飞控内部枚举顺序不同，查询命令里已做显式换算，QGC 直接信任数字）
+    //   <当前点>: 1=A 2=B → 0=A 1=B
+    // 用正则一次性提取，避免字符串 split 在“数字+关键字”双保险格式下错位。
+    static const QRegularExpression shuttleStateRe(QStringLiteral("SHUTTLE_STATE\\s+(\\d+)\\s+\\w+\\s+WP\\s+(\\d+)"));
+    const QRegularExpressionMatch stateMatch = shuttleStateRe.match(text);
+    if (stateMatch.hasMatch()) {
+        bool ok = false;
+        const int state = stateMatch.captured(1).toInt(&ok);
+        if (ok && state >= 0 && state <= 4) {
+            _setShuttleState(state);
+        }
+        const int wpNum = stateMatch.captured(2).toInt(&ok);
+        // WP 1=A 2=B → 0=A 1=B；WP 0 表示“无当前点/未启动”，重置为未知(-1)，
+        // 避免船已离开旧点但 UI 仍显示旧点。
+        if (ok && (wpNum == 1 || wpNum == 2)) {
+            _setShuttleCurrentWp(wpNum - 1);
+        } else if (ok && wpNum == 0) {
+            _setShuttleCurrentWp(-1);
+        }
+        _setShuttleMessage(text);
+        return;
+    }
+
+    // 兼容旧格式 / 关键字变化：SHUTTLE_STATE <关键字> WP <当前点>（不含数字）时退回关键字匹配
+    if (text.contains(QStringLiteral("SHUTTLE_STATE"), Qt::CaseInsensitive)) {
+        int state = -1;
+        if (text.contains(QStringLiteral("IDLE"), Qt::CaseInsensitive))       state = 0;
+        else if (text.contains(QStringLiteral("HOVER"), Qt::CaseInsensitive)) state = 1;
+        else if (text.contains(QStringLiteral("MOVING"), Qt::CaseInsensitive)) state = 2;
+        else if (text.contains(QStringLiteral("TASKING"), Qt::CaseInsensitive)) state = 3;
+        else if (text.contains(QStringLiteral("MANUAL_LOCK"), Qt::CaseInsensitive)) state = 4;
+        if (state >= 0) {
+            _setShuttleState(state);
+        }
+        // 提取 WP 后的数字：1=A 2=B，映射成 0=A 1=B；0=无当前点 → 未知(-1)
+        const int wpIdx = text.indexOf(QStringLiteral("WP"), 0, Qt::CaseInsensitive);
+        if (wpIdx >= 0) {
+            const QStringList tokens = text.mid(wpIdx + 2).trimmed().split(QRegularExpression(QStringLiteral("\\s+")));
+            if (!tokens.isEmpty()) {
+                bool ok = false;
+                const int wpNum = tokens.first().toInt(&ok);
+                if (ok && (wpNum == 1 || wpNum == 2)) {
+                    _setShuttleCurrentWp(wpNum - 1);
+                } else if (ok && wpNum == 0) {
+                    _setShuttleCurrentWp(-1);
+                }
+            }
+        }
+        _setShuttleMessage(text);
+        return;
+    }
+
+    // 设点成功 / 任务完成 / 到点回执 / 错误：原样透传（不改状态，状态以 SHUTTLE_STATE 为准）
+    if (text.contains(QStringLiteral("SHUTTLE_WP_A_OK"), Qt::CaseInsensitive)
+        || text.contains(QStringLiteral("SHUTTLE_WP_B_OK"), Qt::CaseInsensitive)
+        || text.contains(QStringLiteral("SHUTTLE_TASK_DONE"), Qt::CaseInsensitive)
         || text.contains(QStringLiteral("REACHED_WP"), Qt::CaseInsensitive)
-        || text.contains(QStringLiteral("TASK_DONE"), Qt::CaseInsensitive)) {
+        || text.contains(QStringLiteral("SHUTTLE_ERR_"), Qt::CaseInsensitive)) {
         _setShuttleMessage(text);
         return;
     }
@@ -3954,6 +4049,22 @@ void Vehicle::_setShuttleMessage(const QString& message)
     if (_shuttleMessage != message) {
         _shuttleMessage = message;
         emit shuttleMessageChanged(_shuttleMessage);
+    }
+}
+
+void Vehicle::_setShuttleState(int state)
+{
+    if (_shuttleState != state) {
+        _shuttleState = state;
+        emit shuttleStateChanged(_shuttleState);
+    }
+}
+
+void Vehicle::_setShuttleCurrentWp(int wp)
+{
+    if (_shuttleCurrentWp != wp) {
+        _shuttleCurrentWp = wp;
+        emit shuttleCurrentWpChanged(_shuttleCurrentWp);
     }
 }
 
