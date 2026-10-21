@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 水质实时折线图入口图标：单色实心水滴，靠 QGCColoredImage 按 alpha 蒙版染色 -->
+<!-- 水质实时折线图入口图标：水滴，线稿风格（同垃圾桶）。ColoredSvgImageProvider
+     按 alpha 蒙版染色，呈黑色线条 + 透出白底 = 黑里带白，可观看性更好。 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <path fill="#ffffff" d="M12 2C12 2 5 10.2 5 14.6A7 7 0 0 0 19 14.6C19 10.2 12 2 12 2Z"/>
+  <g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 水滴外轮廓 -->
+    <path d="M12 2C12 2 5 10.2 5 14.6A7 7 0 0 0 19 14.6C19 10.2 12 2 12 2Z"/>
+    <!-- 水滴内的高光线（增加细节） -->
+    <path d="M8.5 15a3.5 3.5 0 0 0 3.5 3.4"/>
+  </g>
 </svg>

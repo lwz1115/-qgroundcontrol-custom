@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 水质采样杆入口图标：单色滴管造型，靠 QGCColoredImage 按 alpha 蒙版染色 -->
+<!-- 水质采样入口图标：滴管 + 水滴，线稿风格（同垃圾桶）。ColoredSvgImageProvider
+     按 alpha 蒙版染色，呈黑色线条 + 透出白底 = 黑里带白，可观看性更好。
+     注意：viewBox 24x24，所有路径 + 线宽都要留在 0~24 内，否则边缘被裁切。 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <!-- 管身 -->
-  <path fill="#ffffff" d="M10.2 3.2h3.6v14.1a1.8 1.8 0 0 1-3.6 0z"/>
-  <!-- 顶部活塞帽 -->
-  <path fill="#ffffff" d="M9.2 1h5.6v2.4H9.2z"/>
-  <!-- 底部取样水滴 -->
-  <path fill="#ffffff" d="M12 17.6c-.2 0-3.4 3.3-3.4 5a3.4 3.4 0 0 0 6.8 0c0-1.7-3.2-5-3.4-5z"/>
+  <g fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 顶部活塞帽 -->
+    <path d="M9.2 2h5.6v2.4H9.2z"/>
+    <!-- 管身（缩短，给下方水滴留足空间） -->
+    <path d="M10.4 4.4h3.2v8.2h-3.2z"/>
+    <!-- 底部取样水滴（整体上移，底部留 1.4 余量给线宽） -->
+    <path d="M12 13.4c-.2 0-3.3 3.2-3.3 4.8a3.3 3.3 0 0 0 6.6 0c0-1.6-3.1-4.8-3.3-4.8z"/>
+    <!-- 水滴内的小波纹（增加细节） -->
+    <path d="M9.9 17.6a2.6 2.6 0 0 0 2.5 2.5"/>
+  </g>
 </svg>

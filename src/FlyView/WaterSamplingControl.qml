@@ -33,9 +33,11 @@ Item {
     }
 
     /// 面板宽度：介于水质曲线面板与全宽之间，能放下三个中文按钮
+    /// 安卓端遥控器屏幕小，宽度上限再压一档（默认字宽 30 倍 + 绝对 400 逻辑像素），
+    /// 避免点开面板后几乎占满整屏。
     readonly property real _popupWidth: {
         const maxWidth = Math.max(ScreenTools.defaultFontPixelWidth * 14, width - _margin * 4)
-        return Math.min(ScreenTools.defaultFontPixelWidth * 38, maxWidth)
+        return Math.min(ScreenTools.defaultFontPixelWidth * 30, Math.min(400, maxWidth))
     }
 
     /// 摄像头是否在显示（主画面有源）。有源时卡片列紧贴小窗顶部，无源时落到屏幕左下角。
@@ -328,16 +330,16 @@ Item {
         width:           control._cardSize
         height:          control._cardSize
         radius:          ScreenTools.defaultBorderRadius
-        color:           Qt.rgba(0, 0, 0, 0.6)
-        border.color:    Qt.rgba(1, 1, 1, iconMouseArea.containsMouse ? 0.75 : 0.35)
+        color:           Qt.rgba(1, 1, 1, 0.75)
+        border.color:    Qt.rgba(0, 0, 0, iconMouseArea.containsMouse ? 0.55 : 0.18)
         border.width:    1
 
         QGCColoredImage {
             anchors.centerIn: parent
-            width:            parent.width * 0.58
-            height:           parent.height * 0.58
+            width:            parent.width * 0.66
+            height:           parent.height * 0.66
             source:           "/qmlimages/WaterSamplingIcon.svg"
-            color:            "white"
+            color:            "black"
         }
 
         MouseArea {
@@ -360,8 +362,8 @@ Item {
         closePolicy:    Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
         background: Rectangle {
-            color:        Qt.rgba(0, 0, 0, 0.85)
-            border.color: Qt.rgba(1, 1, 1, 0.25)
+            color:        Qt.rgba(1, 1, 1, 0.82)
+            border.color: Qt.rgba(0, 0, 0, 0.2)
             border.width: 1
             radius:       ScreenTools.defaultBorderRadius
         }
@@ -373,93 +375,84 @@ Item {
             QGCLabel {
                 Layout.fillWidth: true
                 text:             qsTr("Water Sampling")
-                color:            "white"
+                color:            "black"
                 font.bold:        true
             }
 
-            // ---- 瓶子选择：1 号瓶 / 2 号瓶（图标 + 瓶号）----
-            QGCLabel {
-                text:  qsTr("Bottle")
-                color: Qt.rgba(1, 1, 1, 0.7)
-            }
-
+            // ---- 瓶子 + 容量同一行：省一行高度，提升空间利用率 ----
             RowLayout {
                 Layout.fillWidth: true
                 spacing:          control._margin
 
-                Repeater {
-                    model: [1, 2]
+                QGCLabel {
+                    text:  qsTr("Bottle")
+                    color: Qt.rgba(0, 0, 0, 0.6)
+                }
 
-                    Rectangle {
-                        required property var modelData
-                        Layout.fillWidth:       true
-                        Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 3
-                        radius:                 ScreenTools.defaultBorderRadius
-                        color:                  Qt.rgba(1, 1, 1, control._selectedBottle === modelData ? 0.28 : 0.08)
-                        border.color:           control._selectedBottle === modelData ? "white" : Qt.rgba(1, 1, 1, 0.35)
-                        border.width:           1
+                // 瓶子下拉框：显示“瓶子1 / 瓶子2”，默认瓶子1
+                QGCComboBox {
+                    Layout.fillWidth: true
+                    model:            [qsTr("瓶子1"), qsTr("瓶子2")]
+                    currentIndex:     control._selectedBottle - 1
+                    enabled:          !control._samplingActive
+                    onActivated: (index) => { control._selectedBottle = index + 1 }
+                }
 
-                        QGCColoredImage {
-                            id:                 bottleIcon
-                            anchors.centerIn:   parent
-                            width:              ScreenTools.defaultFontPixelHeight * 2.2
-                            height:             ScreenTools.defaultFontPixelHeight * 2.2
-                            source:             "/qmlimages/SampleBottleIcon.svg"
-                            color:              "white"
+                QGCLabel {
+                    text:  qsTr("Capacity")
+                    color: Qt.rgba(0, 0, 0, 0.6)
+                }
+
+                // 容量下拉框：只保留不超过船体最大容量的选项
+                QGCComboBox {
+                    id: capacityCombo
+                    Layout.fillWidth: true
+                    model: {
+                        const items = []
+                        for (const opt of control._capacityOptions) {
+                            if (opt.ml <= control._maxCapacityMl) {
+                                items.push(opt.label)
+                            }
                         }
-
-                        // 瓶号叠加在瓶身中间
-                        QGCLabel {
-                            anchors.centerIn:  bottleIcon
-                            text:              modelData
-                            color:             "white"
-                            font.bold:         true
-                            font.pointSize:    ScreenTools.defaultFontPixelHeight * 0.85
+                        return items
+                    }
+                    // 当前容量不一定在列表里（例如记忆值 5000 而船上限 2500），
+                    // 尽量定位到最接近的可用项；找不到就停留在第 0 项。
+                    currentIndex: {
+                        for (let i = 0; i < control._capacityOptions.length; i++) {
+                            if (control._capacityOptions[i].ml === control._selectedCapacityMl
+                                    && control._capacityOptions[i].ml <= control._maxCapacityMl) {
+                                return i
+                            }
                         }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled:      !control._samplingActive
-                            onClicked:    control._selectedBottle = modelData
+                        return 0
+                    }
+                    enabled:          !control._samplingActive
+                    onActivated: (index) => {
+                        const opt = control._capacityOptions[index]
+                        if (opt) {
+                            control._selectedCapacityMl = opt.ml
                         }
                     }
                 }
             }
 
-            // ---- 容量选择（超过船体最大容量的选项禁用）----
-            QGCLabel {
-                text:  qsTr("Capacity")
-                color: Qt.rgba(1, 1, 1, 0.7)
-            }
-
+            // ---- 预计抽水时间 + 总体进度（同一行小字号，压缩高度）----
             RowLayout {
                 Layout.fillWidth: true
-                spacing:          control._margin * 0.5
+                spacing:          control._margin
 
-                Repeater {
-                    model: control._capacityOptions
-
-                    QGCButton {
-                        required property var modelData
-                        // 四个按钮等宽：统一的基准宽度 + fillWidth 平分剩余空间
-                        Layout.fillWidth:       true
-                        Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 5
-                        Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 2
-                        text:                   modelData.label
-                        // 超过船体最大容量 → 禁用
-                        enabled:                (modelData.ml <= control._maxCapacityMl) && !control._samplingActive
-                        checked:                control._selectedCapacityMl === modelData.ml
-                        onClicked:              control._selectedCapacityMl = modelData.ml
-                    }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    text:             qsTr("Estimated pump time: %1 s").arg(Math.round(control._pumpSeconds))
+                    color:            Qt.rgba(0, 0, 0, 0.6)
+                    font.pointSize:   ScreenTools.smallFontPointSize * 0.9
                 }
-            }
-
-            // ---- 预计抽水时间（容量 ÷ 飞控流速 WS_FLOW_RATE）----
-            QGCLabel {
-                Layout.fillWidth: true
-                text:             qsTr("Estimated pump time: %1 s").arg(Math.round(control._pumpSeconds))
-                color:            Qt.rgba(1, 1, 1, 0.7)
-                font.pointSize:   ScreenTools.smallFontPointSize * 0.9
+                QGCLabel {
+                    text:             control._progressText
+                    color:            Qt.rgba(0, 0, 0, 0.6)
+                    font.pointSize:   ScreenTools.smallFontPointSize * 0.9
+                }
             }
 
             // ---- 前置条件提示（非模态，避免“界面在跑但机构没动”）----
@@ -467,7 +460,7 @@ Item {
                 Layout.fillWidth: true
                 visible:             control._blockReason !== ""
                 text:                control._blockReason
-                color:               "#F5A623"
+                color:               "#B35C00"
                 wrapMode:            Text.WordWrap
                 font.pointSize:      ScreenTools.smallFontPointSize * 0.9
             }
@@ -486,10 +479,10 @@ Item {
             Rectangle {
                 Layout.fillWidth: true
                 height:           1
-                color:            Qt.rgba(1, 1, 1, 0.25)
+                color:            Qt.rgba(0, 0, 0, 0.15)
             }
 
-            // ---- 流程显示（进度条 + 当前步骤 + 剩余时间）----
+            // ---- 流程显示（进度条 + 当前步骤）----
 
             // 整体进度条
             Item {
@@ -499,7 +492,7 @@ Item {
                 Rectangle {   // 背景轨道
                     anchors.fill: parent
                     radius:       height / 2
-                    color:        Qt.rgba(1, 1, 1, 0.2)
+                    color:        Qt.rgba(0, 0, 0, 0.12)
                 }
 
                 Rectangle {   // 进度填充
@@ -520,16 +513,8 @@ Item {
                 font.pointSize:      ScreenTools.defaultFontPixelHeight * 0.55
                 font.bold:           true
                 text:                control._currentStepText
-                color:               "white"
+                color:               "black"
                 wrapMode:            Text.WordWrap
-            }
-
-            // 总体进度百分比 + 总剩余秒数
-            QGCLabel {
-                Layout.fillWidth: true
-                text:             control._progressText
-                color:            Qt.rgba(1, 1, 1, 0.7)
-                font.pointSize:   ScreenTools.smallFontPointSize * 0.9
             }
         }
     }

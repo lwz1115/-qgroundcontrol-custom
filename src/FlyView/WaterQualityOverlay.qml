@@ -146,16 +146,16 @@ Item {
         width:           control._cardSize
         height:          control._cardSize
         radius:          ScreenTools.defaultBorderRadius
-        color:           Qt.rgba(0, 0, 0, 0.6)
-        border.color:    Qt.rgba(1, 1, 1, iconMouseArea.containsMouse ? 0.75 : 0.35)
+        color:           Qt.rgba(1, 1, 1, 0.75)
+        border.color:    Qt.rgba(0, 0, 0, iconMouseArea.containsMouse ? 0.55 : 0.18)
         border.width:    1
 
         QGCColoredImage {
             anchors.centerIn: parent
-            width:            parent.width * 0.58
-            height:           parent.height * 0.58
+            width:            parent.width * 0.66
+            height:           parent.height * 0.66
             source:           "/qmlimages/WaterQualityDropIcon.svg"
-            color:            "white"
+            color:            "black"
         }
 
         MouseArea {
@@ -175,8 +175,8 @@ Item {
         closePolicy:    Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
         background: Rectangle {
-            color:        Qt.rgba(0, 0, 0, 0.85)
-            border.color: Qt.rgba(1, 1, 1, 0.25)
+            color:        Qt.rgba(1, 1, 1, 0.82)
+            border.color: Qt.rgba(0, 0, 0, 0.2)
             border.width: 1
             radius:       ScreenTools.defaultBorderRadius
         }
@@ -184,6 +184,7 @@ Item {
         contentItem: ColumnLayout {
             spacing: control._margin
 
+            // 标题 + 当前参数单位（第一行）
             RowLayout {
                 Layout.fillWidth: true
                 spacing:          control._margin
@@ -191,24 +192,25 @@ Item {
                 QGCLabel {
                     Layout.fillWidth: true
                     text:             qsTr("Water Quality Trend")
-                    color:            "white"
+                    color:            "black"
                     font.bold:        true
-                }
-
-                QGCComboBox {
-                    id:                    parameterCombo
-                    Layout.preferredWidth: ScreenTools.defaultFontPixelWidth * 13
-                    model:                 control._parameterLabels
-                    // 用户改选后由 onActivated 改状态，这里只在初始 / 重置时同步
-                    currentIndex:          control._selectedIndex
-                    onActivated: (index) => control._selectedParameter = (index === 0) ? "" : control._parameterDefs[index - 1].key
                 }
 
                 QGCLabel {
                     text:    control._selectedUnits
-                    color:   Qt.rgba(1, 1, 1, 0.7)
+                    color:   Qt.rgba(0, 0, 0, 0.6)
                     visible: text.length > 0
                 }
+            }
+
+            // 参数下拉独占一行，避免与标题挤在一起把弹层撑宽
+            QGCComboBox {
+                id:                    parameterCombo
+                Layout.fillWidth:      true
+                model:                 control._parameterLabels
+                // 用户改选后由 onActivated 改状态，这里只在初始 / 重置时同步
+                currentIndex:          control._selectedIndex
+                onActivated: (index) => control._selectedParameter = (index === 0) ? "" : control._parameterDefs[index - 1].key
             }
 
             WaterQualityLiveChart {
@@ -222,33 +224,15 @@ Item {
                 filterExtremes:         control._filterExtremes
             }
 
-            QGCLabel {
-                Layout.fillWidth: true
-                visible:          !control._singleMode
-                text:             qsTr("Each parameter is scaled to its own range")
-                color:            Qt.rgba(1, 1, 1, 0.7)
-                font.pointSize:   ScreenTools.defaultFontPointSize * 0.85
-                wrapMode:         Text.WordWrap
-            }
-
             RowLayout {
                 Layout.fillWidth: true
                 spacing:          control._margin
 
                 QGCCheckBox {
                     text:      qsTr("Remove min/max")
-                    textColor: "white"
+                    textColor: "black"
                     checked:   control._filterExtremes
                     onToggled: control._filterExtremes = checked
-                }
-
-                QGCLabel {
-                    Layout.fillWidth:   true
-                    Layout.leftMargin:  Math.round(control._margin * 0.5)
-                    text:               qsTr("Live view only, nothing is saved")
-                    color:              Qt.rgba(1, 1, 1, 0.7)
-                    font.pointSize:     ScreenTools.defaultFontPointSize * 0.8
-                    elide:              Text.ElideRight
                 }
 
                 QGCButton {
@@ -257,32 +241,31 @@ Item {
                 }
             }
 
-            GridLayout {
+            // ---- 参数图例：Flow 自动换行，一行放不下自动到第二行，不超出弹层宽度 ----
+            Flow {
                 Layout.fillWidth: true
                 visible:          !control._singleMode
-                columns:          2
-                columnSpacing:    control._margin
-                rowSpacing:       Math.round(control._margin * 0.5)
+                spacing:          Math.round(control._margin * 0.4)
 
                 Repeater {
                     model: control._parameterDefs
 
                     RowLayout {
                         required property var modelData
-                        spacing: Math.round(control._margin * 0.5)
+                        spacing: Math.round(control._margin * 0.3)
 
                         Rectangle {
                             Layout.alignment: Qt.AlignVCenter
-                            width:            9
-                            height:           9
+                            width:            8
+                            height:           8
                             radius:           2
                             color:            modelData.color
                         }
 
                         QGCLabel {
                             text:           modelData.label
-                            color:          "white"
-                            font.pointSize: ScreenTools.defaultFontPointSize * 0.85
+                            color:          "black"
+                            font.pointSize: ScreenTools.defaultFontPointSize * 0.7
                         }
                     }
                 }
@@ -291,8 +274,10 @@ Item {
     }
 
     /// 弹层宽度：随字体缩放，但不超出可用区域
-    readonly property real _popupWidth: Math.min(Math.max(ScreenTools.defaultFontPixelWidth * 40, 300),
-                                                 Math.max(240, width - _margin * 4))
+    /// 安卓端遥控器屏幕小，宽度上限再压一档（默认字宽 30 倍 + 绝对 400 逻辑像素），
+    /// 避免点开面板后几乎占满整屏；图表高度随宽度同比例缩小。
+    readonly property real _popupWidth: Math.min(Math.max(ScreenTools.defaultFontPixelWidth * 30, 260),
+                                                 Math.min(400, Math.max(240, width - _margin * 4)))
 
     /// 下拉框当前下标（0 = 全部参数）
     readonly property int _selectedIndex: {
