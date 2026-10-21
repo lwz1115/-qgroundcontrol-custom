@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <!-- 定位船位（HOME）图标：小房子，表示把 HOME 点设到当前位置。
+         工具条图标，ColoredSvgImageProvider 染色。 -->
+    <g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <!-- 屋顶 -->
+        <path d="M3 10.5L12 3l9 7.5"/>
+        <!-- 屋身 -->
+        <path d="M5.5 10v10h13v-10"/>
+        <!-- 门 -->
+        <path d="M10 20v-5h4v5"/>
+    </g>
+</svg>

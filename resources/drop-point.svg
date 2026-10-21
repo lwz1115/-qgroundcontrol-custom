@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <!-- 就地打点图标：中间是缩小版的“航点”图标（外圈圆环 + 中心实心点），
+         外面一圈大圆围着，圆的上 / 下 / 左 / 右各突出一小段尖角，呈雷达锁定样式，
+         表示“锁定当前位置打一个航点”。工具条图标，ColoredSvgImageProvider 染色。 -->
+    <g fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <!-- 外圈大圆（围着航点） -->
+        <circle cx="12" cy="12" r="6.8"/>
+        <!-- 上 / 下 / 左 / 右 四处尖角（突出到大圆外） -->
+        <path d="M12 3.8V1"/>
+        <path d="M12 20.2V23"/>
+        <path d="M3.8 12H1"/>
+        <path d="M20.2 12H23"/>
+    </g>
+    <!-- 中间缩小版“航点”图标：外圈圆环 + 中心实心点 -->
+    <g fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <!-- 航点外圈圆环 -->
+        <circle cx="12" cy="12" r="3.1"/>
+        <!-- 航点中心实心点 -->
+        <circle cx="12" cy="12" r="1.0" fill="#ffffff" stroke="none"/>
+    </g>
+</svg>

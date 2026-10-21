@@ -231,6 +231,36 @@ Item {
         _missionController.insertLandItem(mapCenter(), nextIndex, true /* makeCurrentItem */)
     }
 
+    /// 就地打点：在船体当前位置插入一个航点。
+    /// 通过现成的 insertSimpleItemAfterCurrent 走任务航点逻辑，序号自动接续已有航点
+    /// （有航点1 它就是 2）。无连接车辆 / 无有效定位时不动作并提示。
+    function insertWaypointAtVehiclePosition() {
+        const vehicle = QGroundControl.multiVehicleManager.activeVehicle
+        if (!vehicle) {
+            QGroundControl.showMessageDialog(mainWindow, qsTr("就地打点"), qsTr("未连接船体"), Dialog.Ok)
+            return
+        }
+        if (!vehicle.coordinate || !vehicle.coordinate.isValid) {
+            QGroundControl.showMessageDialog(mainWindow, qsTr("就地打点"), qsTr("船体当前无有效定位"), Dialog.Ok)
+            return
+        }
+        insertSimpleItemAfterCurrent(vehicle.coordinate)
+    }
+
+    /// 定位船位：把 HOME 点移动到当前船体位置。
+    function moveHomeToVehiclePosition() {
+        const vehicle = QGroundControl.multiVehicleManager.activeVehicle
+        if (!vehicle) {
+            QGroundControl.showMessageDialog(mainWindow, qsTr("定位船位"), qsTr("未连接船体"), Dialog.Ok)
+            return
+        }
+        if (!vehicle.coordinate || !vehicle.coordinate.isValid) {
+            QGroundControl.showMessageDialog(mainWindow, qsTr("定位船位"), qsTr("船体当前无有效定位"), Dialog.Ok)
+            return
+        }
+        _missionController.setHomePosition(vehicle.coordinate)
+    }
+
     QGCFileDialog {
         id: fileDialog
         folder: _appSettings ? _appSettings.missionSavePath : ""
@@ -528,17 +558,23 @@ Item {
                         }
                     },
                     ToolStripAction {
-                        objectName: "planToolStrip_landButton"
-                        text: _planMasterController.controllerVehicle.multiRotor
-                                    ? qsTr("Return")
-                                    : _missionController.isInsertLandValid && _missionController.hasLandItem
-                                      ? qsTr("Alt Land")
-                                      : qsTr("Land")
-                        iconSource: "/res/rtl.svg"
-                        enabled: _missionController.isInsertLandValid
-                        visible: toolStrip._isMissionLayer
+                        objectName: "planToolStrip_dropPointButton"
+                        text: qsTr("就地打点")
+                        iconSource: "/res/drop-point.svg"
+                        // 仅无人船显示：在船体当前位置插入一个航点（序号自动接续已有航点）
+                        visible: toolStrip._isMissionLayer && _planMasterController.controllerVehicle.rover
                         onTriggered: {
-                            insertLandItemAfterCurrent()
+                            insertWaypointAtVehiclePosition()
+                        }
+                    },
+                    ToolStripAction {
+                        objectName: "planToolStrip_setHomeButton"
+                        text: qsTr("定位船位")
+                        iconSource: "/res/set-home.svg"
+                        // 把 HOME 点移动到当前船体位置
+                        visible: toolStrip._isMissionLayer && _planMasterController.controllerVehicle.rover
+                        onTriggered: {
+                            moveHomeToVehiclePosition()
                         }
                     },
                     ToolStripAction {

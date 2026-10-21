@@ -84,6 +84,8 @@ qt_add_resources(PlanViewModule planview_resources
         "${CMAKE_SOURCE_DIR}/resources/terrain.svg"
         "${CMAKE_SOURCE_DIR}/resources/UploadToVehicle.svg"
         "${CMAKE_SOURCE_DIR}/resources/waypoint.svg"
+        "${CMAKE_SOURCE_DIR}/resources/drop-point.svg"
+        "${CMAKE_SOURCE_DIR}/resources/set-home.svg"
 )
 
 qt_add_resources(PlanViewModule planview_qmlimages

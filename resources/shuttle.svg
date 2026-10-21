@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 两点穿梭横移入口图标：双向箭头，靠 QGCColoredImage 按 alpha 蒙版染色 -->
+<!-- 两点穿梭横移入口图标：等价交换符号 ⇌。
+     上下两条主线同一 x 范围（左右对齐）、以画布中心居中、水平平行；
+     上箭头指向右、末端向左上往回折；下箭头指向左、末端向右下往回折。
+     ColoredSvgImageProvider 按 alpha 蒙版染色（QML 侧染深灰）。 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <!-- 左箭头 -->
-  <path fill="#ffffff" d="M4 12l5-5v3h7v4H9v3z"/>
-  <!-- 右箭头 -->
-  <path fill="#ffffff" d="M20 12l-5-5v3H8v4h7v3z"/>
+  <g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="butt" stroke-linejoin="round">
+    <!-- 上箭头（指向右）：主线 x6~18（居中），末端向左上往回折 -->
+    <path d="M6 9.8H18"/>
+    <path d="M18 9.8L13.5 5.8"/>
+    <!-- 下箭头（指向左）：主线 x6~18（居中，与上对齐），末端向右下往回折 -->
+    <path d="M6 14.2H18"/>
+    <path d="M6 14.2L10.5 18.2"/>
+  </g>
 </svg>

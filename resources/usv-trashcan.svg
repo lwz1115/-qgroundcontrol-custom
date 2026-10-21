@@ -1,5 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-    <!-- Full-bleed white trash can: tinted by ColoredSvgImageProvider (SourceIn alpha mask),
-         not dependent on the fill color itself, sized 24x24 to match takeoff/rtl icons -->
-    <path style="fill:#fff" d="M6 2l1-1h10l1 1h4v2H2V2h4zM4 6h16l-1.5 14a2 2 0 0 1-2 1.8h-9a2 2 0 0 1-2-1.8L4 6zm4 2l.7 12h2.3V8H8zm4 0v12h2.3V8H12zm4.3 0l-.7 12H17L17.7 8H16.3z"/>
+    <!-- 优化的垃圾桶图标（24x24 视窗，与起飞/RTL 等工具条图标一致）。
+         均匀线宽 + 圆角的线稿风格：盖子略宽于桶身，顶部中央一段提手，
+         桶身三条等距竖纹。ColoredSvgImageProvider 按 alpha 遮罩着色，
+         呈现单色剪影，线宽与间距的一致性决定观感。 -->
+    <g fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <!-- 桶身：圆角矩形，上沿在盖子下方 -->
+        <path d="M4.8 7.2h14.4l-1.05 12.1a1.9 1.9 0 0 1-1.89 1.72H7.74a1.9 1.9 0 0 1-1.89-1.72L4.8 7.2z"/>
+        <!-- 盖子：略宽于桶身 -->
+        <path d="M3.4 4.6h17.2"/>
+        <!-- 提手 -->
+        <path d="M10 4.6V3.1h4v1.5"/>
+        <!-- 桶身竖纹 -->
+        <path d="M9.2 9.6v9.2"/>
+        <path d="M12 9.6v9.2"/>
+        <path d="M14.8 9.6v9.2"/>
+    </g>
 </svg>
