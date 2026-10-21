@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 纯黑背景 -->
     <item>
         <shape android:shape="rectangle">
             <solid android:color="#000000"/>
         </shape>
     </item>
+    <!-- 中央水滴 logo + 水滴正下方白色“澄峰科技”：透明底、gravity=center 原尺寸居中，
+         任何屏幕比例都不会被拉伸变形（见 drawable-*/splash_logo.png） -->
     <item>
-        <bitmap android:src="@drawable/icon" android:gravity="center"/>
+        <bitmap android:src="@drawable/splash_logo" android:gravity="center"/>
     </item>
 </layer-list>
